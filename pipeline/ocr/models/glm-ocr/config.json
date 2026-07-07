@@ -1,0 +1,12 @@
+{
+  "name": "glm-ocr",
+  "label": "GLM-OCR",
+  "description": "Modelo GLM-OCR (Zhipu AI) especializado em OCR. Retorna Markdown diretamente. Nao requer system prompt.",
+  "lmstudio_model": "glm-ocr",
+  "default_prompt_format": "markdown",
+  "supports_formats": ["markdown", "html", "json"],
+  "default_timeout": 300,
+  "default_dpi": 200,
+  "use_system_prompt": false,
+  "use_native_text_reference": false
+}

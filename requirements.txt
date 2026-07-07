@@ -1,0 +1,31 @@
+# RAG System — Core
+zvec>=0.5.1
+pydantic>=2.6
+pydantic-settings>=2.2
+numpy>=1.26
+
+# RAG System — Embeddings (BGE-M3 local)
+sentence-transformers>=3.0
+torch>=2.1
+FlagEmbedding>=1.2
+
+# RAG System — LLM
+openai>=1.30
+
+# RAG System — ONNX backend (opcional, mais eficiente em CPU)
+# Instale tambem: pip install optimum[onnxruntime]
+onnxruntime>=1.17
+tokenizers>=0.19
+
+# RAG System — Optional
+tiktoken>=0.6
+langdetect>=1.0
+
+# OCR Pipeline — Core
+PyMuPDF>=1.23.0
+Pillow>=10.0.0
+requests>=2.31.0
+
+# Testing
+pytest>=7.4
+pytest-cov>=4.1

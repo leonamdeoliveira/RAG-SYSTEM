@@ -1,0 +1,14 @@
+{
+  "name": "granite-docling",
+  "label": "GraniteDocling 258M (GGUF via LM Studio)",
+  "description": "VLM especializado em documentos via LM Studio (GGUF). Contexto max: 8192 tokens. Download: https://huggingface.co/SandLogicTechnologies/granite-docling-258M-GGUF",
+  "lmstudio_model": "granite-docling",
+  "default_prompt_format": "markdown",
+  "supports_formats": ["markdown"],
+  "default_timeout": 300,
+  "default_dpi": 150,
+  "use_system_prompt": false,
+  "use_native_text_reference": false,
+  "use_image_only": false,
+  "max_tokens": 4096
+}

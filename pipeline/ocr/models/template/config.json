@@ -1,0 +1,12 @@
+{
+  "name": "meu-modelo-ocr",
+  "label": "Meu Modelo OCR",
+  "description": "Descricao do modelo",
+  "lmstudio_model": "nome-do-modelo-no-lm-studio",
+  "default_prompt_format": "markdown",
+  "supports_formats": ["markdown", "html", "json"],
+  "use_system_prompt": true,
+  "use_native_text_reference": true,
+  "default_timeout": 300,
+  "default_dpi": 200
+}

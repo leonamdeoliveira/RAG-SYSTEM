@@ -1,0 +1,11 @@
+{
+  "name": "chandra-ocr-2",
+  "label": "Chandra OCR 2",
+  "description": "Modelo especializado em OCR via LM Studio. Retorna HTML estruturado.",
+  "lmstudio_model": "chandra-ocr-2",
+  "default_prompt_format": "html",
+  "supports_formats": ["markdown", "html", "json"],
+  "default_timeout": 300,
+  "default_dpi": 200,
+  "use_system_prompt": true
+}
