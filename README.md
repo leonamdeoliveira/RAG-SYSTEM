@@ -1,6 +1,6 @@
 # RAG System — Pipeline Local-First Completo
 
-Transforma documentos (PDF, Word, PowerPoint, imagens) em uma base de conhecimento pesquisavel. Funciona integrado ao chat do seu assistente de IA (opencode, Claude Code, Cursor, Copilot e outros) — voce pergunta em linguagem natural e recebe respostas diretas com citacoes, tudo rodando localmente no seu computador, sem internet.
+Transforma documentos (PDF, Word, PowerPoint, imagens) em uma base de conhecimento pesquisavel. Funciona integrado ao chat do seu assistente de IA (opencode, Claude Code, Cursor, Copilot e outros) — voce pergunta em linguagem natural e recebe respostas diretas com citacoes, tudo rodando localmente no seu computador.
 
 Compativel com opencode, Claude Code, Cursor, GitHub Copilot, Windsurf, Antigravity, Codex.
 
@@ -26,22 +26,24 @@ O sistema detecta automaticamente. Indexacao fica ate **2.8x mais rapida** em ba
 
 ## Uso rapido
 
+O fluxo padrao e o proprio chat IA gerar a resposta — o `retrieve` busca os trechos relevantes e devolve para o assistente.
+
 ```bash
-# Indexar
+# 1. Indexar documento
 python main.py ingest documento.pdf
 
-# Buscar (query expansion)
-python main.py retrieve "prazo de pagamento" --top-k 20
+# 2. Perguntar no chat — o assistente chama retrieve internamente
+#    ou voce pode rodar manualmente:
+python main.py retrieve "Qual o prazo de pagamento?" --top-k 20
 
-# Multi-query eficiente (modelo carregado 1x)
-python main.py retrieve-batch "pergunta PT" "question EN" "variacao" --top-k 20
+# 3. Multiplas variacoes em uma so chamada (query expansion)
+python main.py retrieve-batch "prazo PT" "deadline EN" "variacao" --top-k 20
 
-# Com LLM local
+# (Opcional) Modo standalone com LLM local (LM Studio / Ollama)
 python main.py query "Qual o prazo?" --mode answer_with_citations
 
 # Teste offline
 python main.py ingest --rag-only --provider dummy --dimension 64
-python main.py retrieve "teste" --provider dummy --dimension 64
 ```
 
 ---
@@ -51,10 +53,10 @@ python main.py retrieve "teste" --provider dummy --dimension 64
 | Comando | Descricao |
 |---------|-----------|
 | `ingest <input>` | OCR + indexacao |
-| `retrieve <q> --top-k 20` | Busca hibrida (dense+sparse+FTS), formata p/ chat IA |
-| `retrieve-batch "q1" "q2" "q3"` | Multiplas queries, modelo 1x (~3.5s total) |
+| `retrieve <q> --top-k 20` | Busca hibrida — retorna chunks para o chat IA responder |
+| `retrieve-batch "q1" "q2" "q3"` | Multiplas queries, modelo carregado 1x |
 | `retrieve --interactive` | REPL com modelo vivo |
-| `query <q>` | Com LLM local |
+| `query <q>` | *(opcional)* Com LLM local standalone (LM Studio/Ollama) |
 | `reindex --purge` | Reset completo |
 
 ---
@@ -62,9 +64,12 @@ python main.py retrieve "teste" --provider dummy --dimension 64
 ## Arquitetura
 
 ```
-PDF/DOCX -> OCR (PyMuPDF + Tesseract + LM Studio) -> .md
-.md -> Chunking semantico -> BGE-M3 ONNX INT8 (543 MB, dense 1024d + sparse) -> Zvec
-Query -> Retrieval hibrido (dense + FTS + RRF adaptativo) -> Chat IA gera resposta
+Documentos (PDF/Word/PPT/imagens)
+    -> OCR (PyMuPDF + Tesseract) -> Markdown
+    -> Chunking semantico -> BGE-M3 ONNX INT8 (embeddings) -> indice Zvec
+
+Pergunta no chat -> retrieve (dense + FTS + RRF) -> chunks relevantes
+    -> assistente IA gera resposta com citacoes
 ```
 
 **Tempo:** ~3.5s por consulta, ~12s para indexar 55 chunks (DML GPU) / ~33s (CPU).
