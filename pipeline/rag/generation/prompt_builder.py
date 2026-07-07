@@ -15,14 +15,14 @@ from pipeline.rag.generation.prompts import VALID_MODES, context_header, system_
 from pipeline.rag.models import Evidence
 
 
-def _format_chunk(idx: int, e: Evidence, max_chars: int = 1200) -> str:
+def _format_chunk(idx: int, e: Evidence, max_chars: int = 800) -> str:
     path_parts = [p for p in (e.h1, e.h2, e.h3) if p]
-    path = " / ".join(path_parts) if path_parts else "(sem secao)"
+    path = " > ".join(path_parts) if path_parts else "(sem secao)"
     snippet = e.snippet
     if len(snippet) > max_chars:
         snippet = snippet[:max_chars].rsplit(" ", 1)[0] + " […]"
     return (
-        f"[{idx}] FILE: {e.file_name} | SECTION: {path} | CHUNK: {e.chunk_id}\n"
+        f"[{idx}] {path}\n"
         f"{snippet}"
     )
 
@@ -31,7 +31,7 @@ def build_prompt(
     question: str,
     evidence: Sequence[Evidence],
     mode: str = "answer",
-    max_chars_per_chunk: int = 1200,
+    max_chars_per_chunk: int = 800,
 ) -> tuple[str, str]:
     """Retorna (system, user) prontos para o LLM.
 

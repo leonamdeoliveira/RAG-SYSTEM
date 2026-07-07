@@ -14,6 +14,7 @@ openai>=1.30
 
 # RAG System — ONNX backend (opcional, mais eficiente em CPU)
 # Instale tambem: pip install optimum[onnxruntime]
+# Para GPU AMD/Intel/NVIDIA no Windows: pip install onnxruntime-directml
 onnxruntime>=1.17
 tokenizers>=0.19
 

@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 32
     embedding_backend: str = "onnx"  # onnx | torch
     embedding_model_onnx: str = "gpahal/bge-m3-onnx-int8"
+    embedding_onnx_device: str = "auto"  # auto | cpu | dml (DirectML para GPU AMD/Intel/NVIDIA)
 
     # --- zvec store ---
     zvec_enable_sparse: bool = True  # schema com sparse_embedding
@@ -72,6 +73,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_max_tokens: int = 700
     answer_mode: str = "answer"  # answer | answer_with_citations | extractive_summary | study_mode
+    prompt_max_chars_per_chunk: int = 800  # limite de chars por chunk no prompt do LLM
 
     # --- reliability ---
     reliability_low_confidence_threshold: float = 0.3

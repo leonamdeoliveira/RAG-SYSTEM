@@ -40,6 +40,7 @@ def build_provider(s: Settings):
         enable_sparse=s.embedding_enable_sparse,
         backend=s.embedding_backend,
         model_name_onnx=s.embedding_model_onnx,
+        onnx_device=s.embedding_onnx_device,
     )
 
 
@@ -107,6 +108,7 @@ def build_query_pipeline(s: Settings):
         temperature=s.llm_temperature,
         max_tokens=s.llm_max_tokens,
         low_confidence_threshold=s.reliability_low_confidence_threshold,
+        max_chars_per_chunk=s.prompt_max_chars_per_chunk,
     )
     query = QueryPipeline(
         retriever=retriever,

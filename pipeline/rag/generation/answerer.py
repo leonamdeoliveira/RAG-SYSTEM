@@ -113,6 +113,7 @@ class Answerer:
     # Confianca considerada "baixa" (proxy: score max de retrieval). Default
     # conservador: cosine normalizado em [0,1]; < 0.3 sugere recuperacao fraca.
     low_confidence_threshold: float = 0.3
+    max_chars_per_chunk: int = 800
 
     def answer(
         self,
@@ -121,7 +122,7 @@ class Answerer:
         mode: Optional[str] = None,
     ) -> Answer:
         m = mode or self.default_mode
-        system, user = build_prompt(question, evidence, mode=m)
+        system, user = build_prompt(question, evidence, mode=m, max_chars_per_chunk=self.max_chars_per_chunk)
         try:
             text = self.llm.complete(system, user, temperature=self.temperature, max_tokens=self.max_tokens)
         except Exception as e:

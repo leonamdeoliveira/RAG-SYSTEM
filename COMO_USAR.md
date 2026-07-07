@@ -2,14 +2,21 @@
 
 ---
 
-## Primeira execução
+## Primeira execucao
 
 ```bash
 pip install -r requirements.txt
 pip install zvec onnxruntime huggingface-hub transformers
 ```
 
-**LLM local** (opcional, só para `query`):
+**GPU AMD/Intel/NVIDIA (Windows) — recomendado:**
+```bash
+pip uninstall onnxruntime
+pip install onnxruntime-directml
+```
+O sistema detecta automaticamente. Indexacao ate **2.8x mais rapida**.
+
+**LLM local** (opcional, so para `query`):
 - LM Studio: https://lmstudio.ai/
 - Ollama: `ollama pull llama3.2 && ollama serve`
 
@@ -28,7 +35,9 @@ pip install PyMuPDF Pillow requests pytesseract
 ```bash
 python main.py ingest documento.pdf
 python main.py retrieve "Qual o prazo?" --top-k 20
-python main.py retrieve "payment due date" --top-k 20
+
+# Query expansion (multi-idioma)
+python main.py retrieve-batch "prazo de pagamento" "payment due date" "data limite" --top-k 20
 ```
 
 ### 2. Indexar e consultar com LLM local
@@ -51,10 +60,12 @@ python main.py retrieve "teste" --provider dummy --dimension 64
 
 | Comando | O que faz |
 |---------|-----------|
-| `ingest doc.pdf` | OCR → .md → indexar |
-| `ingest --rag-only` | Só indexa .md existentes |
-| `ingest --ocr-only` | Só OCR (.md, não indexa) |
-| `retrieve "q" --top-k 20` | Busca híbrida |
+| `ingest doc.pdf` | OCR -> .md -> indexar |
+| `ingest --rag-only` | So indexa .md existentes |
+| `ingest --ocr-only` | So OCR (.md, nao indexa) |
+| `retrieve "q" --top-k 20` | Busca hibrida |
+| `retrieve-batch "q1" "q2" "q3"` | Multi-queries, modelo 1x |
+| `retrieve --interactive` | REPL interativo |
 | `query "q"` | Com LLM local |
 | `reindex --purge` | Reset completo |
 
@@ -63,27 +74,41 @@ python main.py retrieve "teste" --provider dummy --dimension 64
 ## Onde os arquivos ficam
 
 ```
-data/       ← arquivos brutos
-markdown/   ← .md gerados pelo OCR
-index/      ← Zvec + manifesto
+data/       <- arquivos brutos
+markdown/   <- .md gerados pelo OCR
+index/      <- Zvec + manifesto
 ```
+
+---
+
+## Configuracoes principais
+
+| Variavel | Padrao | Descricao |
+|----------|--------|-----------|
+| `RAG_EMBEDDING_ONNX_DEVICE` | `auto` | `auto` / `cpu` / `dml` (GPU) |
+| `RAG_RETRIEVAL_TOP_K` | `20` | Chunks recuperados por query |
+| `RAG_RETRIEVAL_MODE` | `hybrid` | `dense` / `fts` / `hybrid` / `sparse` |
+| `RAG_PROMPT_MAX_CHARS_PER_CHUNK` | `800` | Limite de chars/chunk no prompt |
+| `RAG_OCR_MODE` | `hybrid` | `hybrid` / `classic_only` / `legacy` |
 
 ---
 
 ## Dicas de query expansion
 
-| Pergunta | Variações |
+| Pergunta | Variacoes |
 |----------|-----------|
 | "prazo de entrega" | "delivery deadline", "data limite envio" |
 | "multa por atraso" | "late payment penalty", "juros mora" |
-| "requisitos técnicos" | "technical requirements", "system specs" |
+| "requisitos tecnicos" | "technical requirements", "system specs" |
 
 ---
 
 ## Troubleshooting
 
-| Problema | Solução |
+| Problema | Solucao |
 |----------|---------|
-| Zvec não instalado | `pip install zvec>=0.5.1` |
-| Embeddings não carregam | `--provider dummy --dimension 64` |
-| Tesseract não instalado | `winget install UB-Mannheim.TesseractOCR` |
+| Zvec nao instalado | `pip install zvec>=0.5.1` |
+| Embeddings nao carregam | `--provider dummy --dimension 64` |
+| Tesseract nao instalado | `winget install UB-Mannheim.TesseractOCR` |
+| GPU nao detectada | `pip install onnxruntime-directml` |
+| ONNX erro de lock | Aguarde 2s (lock de escrita pendente) |

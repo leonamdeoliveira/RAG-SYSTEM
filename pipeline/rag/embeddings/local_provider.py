@@ -30,6 +30,16 @@ DEFAULT_MODEL_ONNX = "gpahal/bge-m3-onnx-int8"
 DEFAULT_DIMENSION = 1024
 
 
+def _detect_dml() -> bool:
+    """Detecta se onnxruntime tem suporte a DirectML (GPU AMD/Intel/NVIDIA no Windows)."""
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        return "DmlExecutionProvider" in providers
+    except Exception:
+        return False
+
+
 def _detect_cpu_features() -> str:
     """Detecta suporte a AVX-512 vs AVX2. Retorna 'avx512', 'avx2', ou 'unknown'."""
     try:
@@ -93,6 +103,7 @@ class BGEM3LocalProvider:
         enable_sparse: bool = True,
         backend: str = "torch",
         model_name_onnx: str = DEFAULT_MODEL_ONNX,
+        onnx_device: str = "auto",
     ) -> None:
         self._model_name = model_name
         self._model_name_onnx = model_name_onnx
@@ -100,6 +111,7 @@ class BGEM3LocalProvider:
         self._use_fp16 = use_fp16
         self._enable_sparse = enable_sparse
         self._backend = backend
+        self._onnx_device = onnx_device
         self.dimension = dimension
         self._model = None
         self._onnx_tokenizer = None
@@ -158,8 +170,19 @@ class BGEM3LocalProvider:
             so.intra_op_num_threads = max(2, cpu_count // 2)
             so.inter_op_num_threads = 1
             so.enable_mem_pattern = True
+
+            device = self._onnx_device
+            if device == "dml" or (device == "auto" and _detect_dml()):
+                providers = ["DmlExecutionProvider", "CPUExecutionProvider"]
+                log.info("ONNX usando DirectML (GPU AMD/Intel/NVIDIA)")
+            else:
+                providers = ["CPUExecutionProvider"]
+                if device == "dml":
+                    log.warning("DirectML nao disponivel -> fallback CPU")
+                else:
+                    log.info("ONNX usando CPU (threads=%d)", max(2, cpu_count // 2))
             self._model = ort.InferenceSession(
-                model_path, sess_options=so, providers=["CPUExecutionProvider"]
+                model_path, sess_options=so, providers=providers
             )
             output_names = [o.name for o in self._model.get_outputs()]
             log.info("ONNX outputs: %s", output_names)
@@ -180,7 +203,7 @@ class BGEM3LocalProvider:
 
         self._internal_backend = "onnx"
         self.supports_sparse = self._enable_sparse
-        log.info("BGE-M3 carregado via ONNX (device=cpu, quantizado int8, threads=%d)", max(2, cpu_count // 2))
+        log.info("BGE-M3 carregado via ONNX (quantizado int8, threads=%d)", max(2, cpu_count // 2))
 
     def _warmup_onnx(self) -> None:
         if self._onnx_tokenizer is None or self._model is None:
@@ -313,6 +336,7 @@ class BGEM3LocalProvider:
         if self._onnx_tokenizer is None or self._model is None:
             raise RuntimeError("ONNX model/tokenizer not loaded")
 
+        output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
         batch_size = 16
         all_dense: list[np.ndarray] = []
         all_sparse: list[Optional[SparseVector]] = []
@@ -324,21 +348,21 @@ class BGEM3LocalProvider:
             input_ids = np.array([e.ids + [0] * (max_len - len(e.ids)) for e in encodings], dtype=np.int64)
             attn_mask = np.array([e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings], dtype=np.int64)
 
-            output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
             outputs = self._model.run(
                 output_names,
                 {"input_ids": input_ids, "attention_mask": attn_mask},
             )
+            output_map = dict(zip(output_names, outputs))
 
-            dense = np.asarray(outputs[0], dtype=np.float32)
+            dense = np.asarray(output_map["dense_vecs"], dtype=np.float32)
             if dense.ndim == 3:
                 dense = dense[:, 0, :]
             dense = l2_normalize(dense)
             validate_dimension(dense, self.dimension)
             all_dense.append(dense)
 
-            if self._enable_sparse and len(outputs) >= 2:
-                token_weights = np.asarray(outputs[1], dtype=np.float32)
+            if self._enable_sparse and "sparse_vecs" in output_map:
+                token_weights = np.asarray(output_map["sparse_vecs"], dtype=np.float32)
                 if token_weights.ndim == 3:
                     token_weights = token_weights.squeeze(-1)
                 for j in range(len(batch)):
