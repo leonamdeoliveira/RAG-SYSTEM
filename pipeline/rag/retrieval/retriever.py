@@ -9,8 +9,8 @@ Orquestra:
   - reranker leve opcional (cross-encoder)
   - limit max_context_chunks
 
-Config default (ARCHITECTURE.md §2.5):
-  top_k=10, score_threshold=0.0, max_context_chunks=6, max_per_doc=2,
+Config default:
+  top_k=20, score_threshold=0.0, max_context_chunks=8, max_per_doc=3,
   mode="hybrid" (dense + FTS).
 
 `retrieve()` retorna `Evidence[]` pronto para a camada de geracao.
@@ -30,10 +30,10 @@ from pipeline.rag.utils.logging import get_logger
 
 log = get_logger("app.retriever")
 
-DEFAULT_TOP_K = 10
+DEFAULT_TOP_K = 20
 DEFAULT_SCORE_THRESHOLD = 0.0
-DEFAULT_MAX_CONTEXT_CHUNKS = 6
-DEFAULT_MAX_PER_DOC = 2
+DEFAULT_MAX_CONTEXT_CHUNKS = 8
+DEFAULT_MAX_PER_DOC = 3
 DEFAULT_HYBRID_WEIGHTS = [1.0, 0.6]  # [dense, fts/sparse]
 DEFAULT_RERANK_TOP_N_CANDIDATES = 20
 

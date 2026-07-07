@@ -103,6 +103,7 @@ class BGEM3LocalProvider:
         self.dimension = dimension
         self._model = None
         self._onnx_tokenizer = None
+        self._onnx_output_names: Optional[list[str]] = None
         self._internal_backend: Optional[str] = None
         self.supports_sparse = False
 
@@ -160,6 +161,9 @@ class BGEM3LocalProvider:
             self._model = ort.InferenceSession(
                 model_path, sess_options=so, providers=["CPUExecutionProvider"]
             )
+            output_names = [o.name for o in self._model.get_outputs()]
+            log.info("ONNX outputs: %s", output_names)
+            self._onnx_output_names = output_names
 
             self._warmup_onnx()
         except ImportError:
@@ -185,8 +189,9 @@ class BGEM3LocalProvider:
             enc = self._onnx_tokenizer.encode("warmup")
             ids = np.array([enc.ids], dtype=np.int64)
             mask = np.array([enc.attention_mask], dtype=np.int64)
+            output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
             self._model.run(
-                ["dense_vecs", "sparse_vecs"],
+                output_names,
                 {"input_ids": ids, "attention_mask": mask},
             )
         except Exception:
@@ -319,8 +324,9 @@ class BGEM3LocalProvider:
             input_ids = np.array([e.ids + [0] * (max_len - len(e.ids)) for e in encodings], dtype=np.int64)
             attn_mask = np.array([e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings], dtype=np.int64)
 
+            output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
             outputs = self._model.run(
-                ["dense_vecs", "sparse_vecs"],
+                output_names,
                 {"input_ids": input_ids, "attention_mask": attn_mask},
             )
 

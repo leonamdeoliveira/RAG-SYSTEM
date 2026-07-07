@@ -25,7 +25,7 @@ except ImportError:  # fallback mínimo se pydantic-settings ausente
 
 class Settings(BaseSettings):
     # --- paths ---
-    data_dir: Path = Path("data")
+    data_dir: Path = Path("data")  # diretorio com .md para o RAG (recebe overrides de markdown_dir)
     index_dir: Path = Path("index")
     zvec_path: Path = Path("index/zvec_collection")
 
@@ -57,8 +57,8 @@ class Settings(BaseSettings):
     retrieval_mode: str = "hybrid"  # dense | fts | hybrid | sparse
     retrieval_rerank: bool = False  # desativado — chat IA faz reranking
 
-    # --- reranker (cross-encoder) ---
-    rerank_enabled: bool = True
+    # --- reranker (cross-encoder; desativado por padrao — chat IA faz o reranking) ---
+    rerank_enabled: bool = False
     rerank_model: str = "suhaan7988/bge-reranker-v2-m3-int8-onnx"
     rerank_device: str = "cpu"
     rerank_max_length: int = 1024
