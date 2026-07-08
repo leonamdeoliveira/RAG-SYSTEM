@@ -59,6 +59,10 @@ def build_ingest_pipeline(s: Settings) -> IngestPipeline:
     loader = MarkdownLoader(s.data_dir, manifest)
     provider = build_provider(s)
     store = build_store(s)
+
+    embed_cache_dir = s.embed_cache_dir if s.embed_cache_enabled else None
+    model_id = _get_model_id(s, provider)
+
     return IngestPipeline(
         loader=loader,
         chunker=build_chunker(s),
@@ -66,7 +70,17 @@ def build_ingest_pipeline(s: Settings) -> IngestPipeline:
         store=store,
         manifest=manifest,
         batch_size=s.embedding_batch_size,
+        embed_cache_dir=embed_cache_dir,
+        model_id=model_id,
     )
+
+
+def _get_model_id(s: Settings, provider) -> str:
+    """Gera identificador unico do modelo para invalidacao de cache."""
+    backend = s.embedding_backend
+    model = s.embedding_model if backend == "torch" else s.embedding_model_onnx
+    provider_name = getattr(provider, "name", "unknown")
+    return f"{provider_name}:{model}:{backend}"
 
 
 def build_query_pipeline(s: Settings):

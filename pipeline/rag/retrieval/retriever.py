@@ -22,6 +22,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+import numpy as np
+
 from pipeline.rag.embeddings.base import EmbeddingProvider, SparseVector
 from pipeline.rag.models import Evidence
 from pipeline.rag.retrieval.filters import FilterBuilder, post_filter_tags
@@ -36,6 +38,7 @@ DEFAULT_SCORE_THRESHOLD = 0.0
 DEFAULT_MAX_CONTEXT_CHUNKS = 8
 DEFAULT_MAX_PER_DOC = 3
 DEFAULT_RERANK_TOP_N_CANDIDATES = 20
+DEFAULT_QUERY_CACHE_SIZE = 128
 
 
 @dataclass
@@ -47,6 +50,7 @@ class RetrievalConfig:
     mode: str = "hybrid"  # dense | fts | hybrid | sparse
     rerank: bool = True
     rerank_top_n_candidates: int = DEFAULT_RERANK_TOP_N_CANDIDATES
+    query_cache_size: int = DEFAULT_QUERY_CACHE_SIZE
 
     def __post_init__(self) -> None:
         if self.mode not in {"dense", "fts", "hybrid", "sparse", "semantic"}:
@@ -65,6 +69,9 @@ class Retriever:
         self.provider = provider
         self.config = config or RetrievalConfig()
         self.reranker = reranker or CrossEncoderReranker(enabled=self.config.rerank)
+        self._query_cache: dict[str, "np.ndarray"] = {}
+        self._query_cache_max = self.config.query_cache_size
+        self._query_cache_hits = 0
 
     # -------------------------------------------------------- public
 
@@ -123,11 +130,22 @@ class Retriever:
 
     # -------------------------------------------------------- interna
 
+    def _embed_query_dense_cached(self, query: str) -> np.ndarray:
+        """Embedda query com cache LRU em memoria (dict simples)."""
+        if query in self._query_cache:
+            self._query_cache_hits += 1
+            return self._query_cache[query]
+        vec = self.provider.embed_query_dense(query)
+        if len(self._query_cache) >= self._query_cache_max:
+            self._query_cache.pop(next(iter(self._query_cache)))
+        self._query_cache[query] = vec
+        return vec
+
     def _search(self, query: str, top_k: int, filter_sql: Optional[str]) -> list[Evidence]:
         mode = self.config.mode
 
         if mode == "dense":
-            qv = self.provider.embed_query_dense(query)
+            qv = self._embed_query_dense_cached(query)
             result = self.store.search_dense(qv, top_k=top_k, filter=filter_sql)
         elif mode == "fts":
             result = self.store.search_fts(match_string=query, top_k=top_k, filter=filter_sql)
@@ -145,7 +163,7 @@ class Retriever:
         else:
             # hybrid (default): dense + FTS com RRF adaptativo
             t_emb = time.perf_counter()
-            qv = self.provider.embed_query_dense(query)
+            qv = self._embed_query_dense_cached(query)
             t_emb_done = time.perf_counter()
             rank_k = self._rank_constant_for(query)
             result = self.store.search_hybrid(

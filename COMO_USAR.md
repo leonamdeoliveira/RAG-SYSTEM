@@ -76,7 +76,23 @@ python main.py retrieve "teste" --provider dummy --dimension 64
 ```
 data/       <- arquivos brutos
 markdown/   <- .md gerados pelo OCR
-index/      <- Zvec + manifesto
+index/      <- Zvec + manifesto + embed_cache.db
+```
+
+---
+
+## Cache de Embeddings
+
+O sistema cacheia embeddings no SQLite para acelerar reindexacoes. Se voce edita 1 paragrafo em um documento de 200 chunks, apenas o chunk alterado e re-embeddado.
+
+**Desabilitar:**
+```bash
+RAG_EMBED_CACHE_ENABLED=false python main.py ingest documento.pdf
+```
+
+**Resetar cache:**
+```bash
+rm index/embed_cache.db
 ```
 
 ---
@@ -85,6 +101,8 @@ index/      <- Zvec + manifesto
 
 | Variavel | Padrao | Descricao |
 |----------|--------|-----------|
+| `RAG_EMBED_CACHE_ENABLED` | `true` | Cache de embeddings (SQLite) |
+| `RAG_EMBED_CACHE_DIR` | `index/embed_cache.db` | Caminho do cache |
 | `RAG_EMBEDDING_ONNX_DEVICE` | `auto` | `auto` / `cpu` / `dml` (GPU) |
 | `RAG_RETRIEVAL_TOP_K` | `20` | Chunks recuperados por query |
 | `RAG_RETRIEVAL_MODE` | `hybrid` | `dense` / `fts` / `hybrid` / `sparse` |

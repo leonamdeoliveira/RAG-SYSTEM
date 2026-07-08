@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     index_dir: Path = Path("index")
     zvec_path: Path = Path("index/zvec_collection")
 
+    # --- embed cache ---
+    embed_cache_enabled: bool = True
+    embed_cache_dir: Path = Path("index/embed_cache.db")
+
     # --- chunker ---
     chunker_target_tokens: int = 600
     chunker_min_tokens: int = 80
@@ -96,7 +100,7 @@ class Settings(BaseSettings):
 def get_settings(**overrides) -> Settings:
     """Factory com overrides opcionais (util em testes)."""
     s = Settings()
-    path_fields = {"data_dir", "index_dir", "zvec_path"}
+    path_fields = {"data_dir", "index_dir", "zvec_path", "embed_cache_dir"}
     for k, v in overrides.items():
         if hasattr(s, k):
             if k in path_fields and isinstance(v, str):

@@ -3,6 +3,11 @@ data/*
 markdown/*
 index/*
 
+# SQLite / cache de embeddings (apenas arquivos de dados)
+*.db
+*.sqlite
+*.sqlite3
+
 # Python
 __pycache__/
 *.pyc

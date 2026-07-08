@@ -94,6 +94,8 @@ Cada chamada recarrega o modelo (~4s). Use só para perguntas isoladas.
 | Chunker | Semântico Markdown | Hierarquia de headings, janela deslizante, filtro anti-ruído |
 | Tokenizer | `tokenizers` (Rust) | 21ms vs 12s do `transformers` |
 | Embedding | BGE-M3 ONNX INT8 (C++ via onnxruntime) | 1024d dense + sparse, 6 threads (metade CPU) |
+| Embed Cache | SQLite (stdlib) | Cacheia dense+sparse por chunk_id, versionado por modelo |
+| Query Cache | LRU em memória | 128 queries, zero I/O para queries repetidas |
 | Dense search | Zvec HNSW (COSINE, C++ nativo) | ~1ms |
 | FTS | Zvec FTS nativo (BM25, C++ nativo) | ~1ms |
 | Hybrid fusion | Zvec RRF (Reciprocal Rank Fusion) | k adaptativo por tipo de query |
@@ -111,6 +113,22 @@ Cada chamada recarrega o modelo (~4s). Use só para perguntas isoladas.
 ```bash
 pip install -r "SKILL_DIR/requirements.txt"
 pip install zvec onnxruntime tokenizers huggingface-hub
+```
+
+## Cache de Embeddings
+
+Habilitado por padrao. SQLite em `index/embed_cache.db` (zero deps externas).
+
+- **Reindex incremental**: se 1 paragrafo muda em doc de 200 chunks, apenas 1 chunk e re-embeddado
+- **Versionado por modelo**: trocar torch/onnx invalida cache automaticamente
+- **Query cache LRU**: 128 queries em memoria para modo interativo
+
+```bash
+# Desabilitar
+RAG_EMBED_CACHE_ENABLED=false python main.py ingest "ARQUIVO"
+
+# Resetar cache
+rm index/embed_cache.db
 ```
 
 ## Troubleshooting

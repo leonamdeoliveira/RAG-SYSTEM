@@ -76,6 +76,29 @@ Pergunta no chat -> retrieve (dense + FTS + RRF) -> chunks relevantes
 
 ---
 
+## Cache de Embeddings
+
+O sistema cacheia embeddings no SQLite (`index/embed_cache.db`) para acelerar reindexacoes incrementais. Se um documento tem 200 chunks e voce edita apenas 1 paragrafo, apenas o chunk alterado e re-embeddado — os outros 199 vem do cache.
+
+**Caracteristicas:**
+- **Zero deps externas** — usa `sqlite3` da stdlib Python
+- **Dense + sparse** cacheados juntos (mesmo forward pass no ONNX)
+- **Versionado por modelo** — trocar de torch para onnx invalida cache automaticamente
+- **Query cache LRU** — 128 queries em memoria para modo interativo
+- **PRAGMA WAL** — write-ahead log para writes rapidos
+
+**Desabilitar:**
+```bash
+RAG_EMBED_CACHE_ENABLED=false python main.py ingest documento.pdf
+```
+
+**Resetar cache:**
+```bash
+rm index/embed_cache.db
+```
+
+---
+
 ## Configuracao
 
 ```bash
@@ -83,6 +106,10 @@ Pergunta no chat -> retrieve (dense + FTS + RRF) -> chunks relevantes
 RAG_EMBEDDING_BACKEND=onnx              # onnx (recomendado) | torch
 RAG_EMBEDDING_ONNX_DEVICE=auto          # auto | cpu | dml (DirectML GPU)
 RAG_EMBEDDING_MODEL_ONNX=gpahal/bge-m3-onnx-int8
+
+# Cache de embeddings (habilitado por padrao)
+RAG_EMBED_CACHE_ENABLED=true            # true | false
+RAG_EMBED_CACHE_DIR=index/embed_cache.db  # caminho do SQLite
 
 # Retrieval
 RAG_RETRIEVAL_MODE=hybrid
@@ -114,8 +141,15 @@ rag-system/
 ├── pipeline/
 │   ├── ocr/                    # OCR: PDF/DOCX/PPTX -> Markdown
 │   └── rag/                    # RAG: Markdown -> Zvec -> Query
+│       ├── pipelines/
+│       │   ├── ingest.py       # Pipeline de ingestao com cache
+│       │   ├── query.py        # Pipeline de query
+│       │   └── embed_cache.py  # Cache SQLite de embeddings
+│       ├── retrieval/
+│       │   └── retriever.py    # Retrieval com query cache LRU
+│       └── ...
 ├── tests/                      # 88 testes
-├── data/   markdown/   index/
+├── data/   markdown/   index/  # index/ contem Zvec + embed_cache.db
 ```
 
 ---
