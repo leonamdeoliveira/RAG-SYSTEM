@@ -1,6 +1,6 @@
 ---
 name: rag-system
-description: Pipeline RAG local-first completo — OCR de documentos brutos (PDF, DOCX, PPTX, XLSX, EPUB, imagens) + chunking semântico + embeddings BGE-M3 ONNX INT8 + Zvec + retrieval híbrido (dense+FTS+RRF) + resposta fundamentada com citações. Use quando o usuário pedir para "ingerir documento", "indexar PDF", "perguntar sobre documentos", "RAG", "buscar nos documentos", "consultar base de conhecimento". Compatível com opencode, Claude Code, Cursor, GitHub Copilot, Windsurf, Antigravity, Codex.
+description: Pipeline RAG completo — OCR de documentos brutos (PDF, DOCX, PPTX, XLSX, EPUB, imagens) + chunking semântico + embeddings BGE-M3 ONNX INT8 + Zvec + retrieval híbrido (dense+FTS+RRF) + resposta fundamentada com citações. Use quando o usuário pedir para "ingerir documento", "indexar PDF", "perguntar sobre documentos", "RAG", "buscar nos documentos", "consultar base de conhecimento". Compatível com opencode, Claude Code, Cursor, GitHub Copilot, Windsurf, Antigravity, Codex.
 ---
 
 # RAG System — Pipeline Completo Local-First

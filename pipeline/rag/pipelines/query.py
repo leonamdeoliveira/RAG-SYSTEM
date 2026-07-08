@@ -61,25 +61,27 @@ class QueryPipeline:
         attempts = 0
         old_topk = rc.top_k
         old_mode = rc.mode
-        # 2) retry se baixa confianca e ainda nao saturou
-        while (
-            attempts < cfg.max_retries
-            and (not hits or confidence < cfg.low_confidence_threshold)
-        ):
-            attempts += 1
-            rc.top_k = rc.top_k * cfg.expand_factor
-            if rc.mode == "dense":
-                rc.mode = "hybrid"
-                log.info("retry %d: expandindo top_k=%d e modo -> hybrid", attempts, rc.top_k)
-            else:
-                log.info("retry %d: expandindo top_k=%d", attempts, rc.top_k)
-            hits, confidence = self.retriever.retrieve_with_confidence(question, filters)
-        # restaura config original (stateless entre queries)
-        rc.top_k = old_topk
-        rc.mode = old_mode
+        try:
+            # 2) retry se baixa confianca e ainda nao saturou
+            while (
+                attempts < cfg.max_retries
+                and (not hits or confidence < cfg.low_confidence_threshold)
+            ):
+                attempts += 1
+                rc.top_k = rc.top_k * cfg.expand_factor
+                if rc.mode == "dense":
+                    rc.mode = "hybrid"
+                    log.info("retry %d: expandindo top_k=%d e modo -> hybrid", attempts, rc.top_k)
+                else:
+                    log.info("retry %d: expandindo top_k=%d", attempts, rc.top_k)
+                hits, confidence = self.retriever.retrieve_with_confidence(question, filters)
+        finally:
+            # restaura config original (stateless entre queries)
+            rc.top_k = old_topk
+            rc.mode = old_mode
 
         # 3) gerar resposta
-        answer = self.answerer.answer(question, list(hits), mode=mode)
+        answer = self.answerer.answer(question, hits, mode=mode)
 
         # 4) deteccao de conflito (heuristica de scores proximos em chunks diferentes)
         if self._has_potential_conflict(hits, cfg.conflict_score_gap):

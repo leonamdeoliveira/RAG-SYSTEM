@@ -1,4 +1,4 @@
-# RAG System — Pipeline Local-First Completo
+# RAG System — Pipeline Completo
 
 Transforma documentos (PDF, Word, PowerPoint, imagens) em uma base de conhecimento pesquisavel. Funciona integrado ao chat do seu assistente de IA (opencode, Claude Code, Cursor, Copilot e outros) — voce pergunta em linguagem natural e recebe respostas diretas com citacoes, tudo rodando localmente no seu computador.
 
@@ -91,7 +91,7 @@ RAG_RETRIEVAL_MAX_CONTEXT_CHUNKS=8
 RAG_RETRIEVAL_MAX_PER_DOC=3
 
 # Prompt (economia de tokens)
-RAG_PROMPT_MAX_CHARS_PER_CHUNK=800      # chars por chunk no prompt do LLM
+RAG_PROMPT_MAX_CHARS_PER_CHUNK=1600      # chars por chunk no prompt do LLM
 
 # LLM
 RAG_LLM_BASE_URL=http://localhost:1234/v1

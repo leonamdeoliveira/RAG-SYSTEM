@@ -113,7 +113,7 @@ class Answerer:
     # Confianca considerada "baixa" (proxy: score max de retrieval). Default
     # conservador: cosine normalizado em [0,1]; < 0.3 sugere recuperacao fraca.
     low_confidence_threshold: float = 0.3
-    max_chars_per_chunk: int = 800
+    max_chars_per_chunk: int = 1600
 
     def answer(
         self,

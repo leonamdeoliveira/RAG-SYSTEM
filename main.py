@@ -68,9 +68,9 @@ def cmd_ingest(args: argparse.Namespace) -> None:
 
     ocr_mode = args.ocr_mode or os.environ.get("RAG_OCR_MODE", "hybrid")
     model_name = args.model or os.environ.get("RAG_OCR_MODEL", "glm-ocr")
-    quality_threshold = args.quality_threshold or float(os.environ.get("RAG_OCR_QUALITY_THRESHOLD", "0.70"))
+    quality_threshold = args.quality_threshold if args.quality_threshold is not None else float(os.environ.get("RAG_OCR_QUALITY_THRESHOLD", "0.70"))
     ocr_langs = args.ocr_langs or os.environ.get("RAG_OCR_LANGS", "por+eng")
-    dpi_val = args.dpi or int(os.environ.get("RAG_OCR_DPI", "200"))
+    dpi_val = args.dpi if args.dpi is not None else int(os.environ.get("RAG_OCR_DPI", "200"))
     base_url = args.lmstudio_url or os.environ.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
     lm_model = args.lmstudio_model or os.environ.get("LMSTUDIO_MODEL", "glm-ocr")
     api_key = args.lmstudio_api_key or os.environ.get("LMSTUDIO_API_KEY", "")
@@ -361,6 +361,7 @@ def cmd_retrieve(args: argparse.Namespace) -> None:
 
     hits, confidence = retriever.retrieve_with_confidence(question, filters)
     t3 = time.perf_counter()
+    max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
 
     logger = logging.getLogger("rag-system")
     logger.info("TIMING: build=%.1fms  retrieval=%.0fms  TOTAL=%.0fms",
@@ -374,8 +375,8 @@ def cmd_retrieve(args: argparse.Namespace) -> None:
         if ev.h2:
             loc_parts.append(ev.h2)
         loc = " > ".join(loc_parts)
-        snippet = ev.snippet[:300]
-        suffix = "..." if len(ev.snippet) > 300 else ""
+        snippet = ev.snippet[:max_chars]
+        suffix = "..." if len(ev.snippet) > max_chars else ""
         print(f"[{i}] {loc}  (score={ev.score:.3f})")
         try:
             print(f"    {snippet}{suffix}")
@@ -414,6 +415,7 @@ def cmd_retrieve_batch(args: argparse.Namespace) -> None:
     s = get_settings(**overrides)
     query_pipeline, retriever, store = build_query_pipeline(s)
     filters = _parse_filters(args.filter)
+    max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
     t1 = time.perf_counter()
     logger = logging.getLogger("rag-system")
     logger.info("Modelo carregado em %.1fs. Processando %d queries...", t1 - t0, len(args.questions))
@@ -429,7 +431,7 @@ def cmd_retrieve_batch(args: argparse.Namespace) -> None:
                 "chunk_id": ev.chunk_id,
                 "source_path": ev.source_path,
                 "score": ev.score,
-                "snippet": ev.snippet[:300],
+                "snippet": ev.snippet[:max_chars],
                 "h1": ev.h1 or "",
                 "h2": ev.h2 or "",
                 "title": ev.title or "",
@@ -457,7 +459,6 @@ def cmd_retrieve_batch(args: argparse.Namespace) -> None:
 def cmd_reindex(args: argparse.Namespace) -> None:
     from pipeline.rag.config import get_settings
     from pipeline.rag.factory import build_ingest_pipeline, build_store
-    from pipeline.rag.manifest import Manifest
 
     skill_dir = _get_skill_dir()
     markdown_dir = Path(args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown")))
@@ -495,12 +496,9 @@ def cmd_reindex(args: argparse.Namespace) -> None:
             except Exception:
                 pass
 
-    manifest = Manifest(index_dir / "manifest.json")
     manifest_path = index_dir / "manifest.json"
     if manifest_path.exists():
         manifest_path.unlink()
-    manifest._entries.clear()
-    manifest._by_path.clear()
 
     s = get_settings(**overrides)
     pipeline = build_ingest_pipeline(s)
@@ -585,13 +583,16 @@ def _display_answer(answer) -> None:
         print()
 
 
-def _parse_filters(raw: list[str]) -> dict[str, str]:
-    filters: dict[str, str] = {}
+def _parse_filters(raw: list[str]):
+    """Converte lista de 'chave=valor' em FilterBuilder do Zvec."""
+    from pipeline.rag.retrieval.filters import FilterBuilder
+
+    fb = FilterBuilder()
     for f in raw:
         if "=" in f:
             k, v = f.split("=", 1)
-            filters[k.strip()] = v.strip()
-    return filters
+            fb.eq(k.strip(), v.strip())
+    return fb
 
 
 def parse_args() -> argparse.Namespace:
@@ -657,6 +658,7 @@ def parse_args() -> argparse.Namespace:
     p_rbatch.add_argument("--index-dir", type=str, help="Diretorio do indice Zvec")
     p_rbatch.add_argument("--markdown-dir", type=str, help="Diretorio dos .md")
     p_rbatch.add_argument("--top-k", type=int, help="Numero de chunks a recuperar")
+    p_rbatch.add_argument("--max-chars", type=int, help="Limite de chars por snippet (default: config)")
 
     # ---- reindex ----
     p_reindex = sub.add_parser("reindex", help="Reindexação completa")

@@ -31,7 +31,7 @@ def build_prompt(
     question: str,
     evidence: Sequence[Evidence],
     mode: str = "answer",
-    max_chars_per_chunk: int = 800,
+    max_chars_per_chunk: int = 1600,
 ) -> tuple[str, str]:
     """Retorna (system, user) prontos para o LLM.
 

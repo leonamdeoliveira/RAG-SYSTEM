@@ -11,6 +11,7 @@ Normalizacao L2 + metrica COSINE no Zvec: ver decisao D5.
 from __future__ import annotations
 
 import multiprocessing
+import threading
 from typing import Optional
 
 import numpy as np
@@ -71,9 +72,9 @@ def _detect_cpu_features() -> str:
     except Exception:
         pass
     try:
-        import platform as _p
+        import platform
 
-        if _p.system() == "Linux":
+        if platform.system() == "Linux":
             with open("/proc/cpuinfo") as f:
                 flags_line = [l for l in f if l.startswith("flags")]
             if flags_line:
@@ -117,6 +118,7 @@ class BGEM3LocalProvider:
         self._onnx_tokenizer = None
         self._onnx_output_names: Optional[list[str]] = None
         self._internal_backend: Optional[str] = None
+        self._model_lock = threading.Lock()
         self.supports_sparse = False
 
     # ---------------------------------------------------------------- init
@@ -124,12 +126,15 @@ class BGEM3LocalProvider:
     def _ensure_model(self) -> None:
         if self._model is not None:
             return
-        if self._backend == "onnx":
-            self._ensure_onnx()
-            if self._internal_backend is not None:
+        with self._model_lock:
+            if self._model is not None:
                 return
-            log.warning("fallback onnx -> torch devido a erro de carregamento")
-        self._ensure_torch()
+            if self._backend == "onnx":
+                self._ensure_onnx()
+                if self._internal_backend is not None:
+                    return
+                log.warning("fallback onnx -> torch devido a erro de carregamento")
+            self._ensure_torch()
 
     def _ensure_onnx(self) -> None:
         cpu = _detect_cpu_features()
@@ -280,7 +285,7 @@ class BGEM3LocalProvider:
         assert self._internal_backend is not None
 
         if self._internal_backend == "onnx":
-            return self._embed_onnx(texts)
+            return self._embed_onnx(texts, batch_size)
         if self._internal_backend == "flagembedding":
             return self._embed_flag(texts, batch_size)
         return self._embed_st(texts, batch_size)
@@ -332,12 +337,11 @@ class BGEM3LocalProvider:
 
     # ---------------------------------------------------------------- onnx backend
 
-    def _embed_onnx(self, texts: list[str]) -> EmbeddingResult:
+    def _embed_onnx(self, texts: list[str], batch_size: int = 16) -> EmbeddingResult:
         if self._onnx_tokenizer is None or self._model is None:
             raise RuntimeError("ONNX model/tokenizer not loaded")
 
         output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
-        batch_size = 16
         all_dense: list[np.ndarray] = []
         all_sparse: list[Optional[SparseVector]] = []
 

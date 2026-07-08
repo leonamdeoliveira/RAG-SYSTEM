@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_max_tokens: int = 700
     answer_mode: str = "answer"  # answer | answer_with_citations | extractive_summary | study_mode
-    prompt_max_chars_per_chunk: int = 800  # limite de chars por chunk no prompt do LLM
+    prompt_max_chars_per_chunk: int = 1600  # limite de chars por chunk no prompt do LLM
 
     # --- reliability ---
     reliability_low_confidence_threshold: float = 0.3

@@ -88,7 +88,7 @@ index/      <- Zvec + manifesto
 | `RAG_EMBEDDING_ONNX_DEVICE` | `auto` | `auto` / `cpu` / `dml` (GPU) |
 | `RAG_RETRIEVAL_TOP_K` | `20` | Chunks recuperados por query |
 | `RAG_RETRIEVAL_MODE` | `hybrid` | `dense` / `fts` / `hybrid` / `sparse` |
-| `RAG_PROMPT_MAX_CHARS_PER_CHUNK` | `800` | Limite de chars/chunk no prompt |
+| `RAG_PROMPT_MAX_CHARS_PER_CHUNK` | `1600` | Limite de chars/chunk no prompt |
 | `RAG_OCR_MODE` | `hybrid` | `hybrid` / `classic_only` / `legacy` |
 
 ---

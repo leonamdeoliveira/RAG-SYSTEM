@@ -84,7 +84,8 @@ class Chunker:
             seeds.extend(self._split_block(b))
         seeds = self._accumulate(seeds)
         chunks: list[Chunk] = []
-        for idx, b in enumerate(seeds):
+        chunk_idx = 0
+        for b in seeds:
             text = b.text.strip("\n")
             if not text.strip():
                 continue
@@ -95,7 +96,7 @@ class Chunker:
                 Chunk(
                     chunk_id=f"{doc.doc_id}_{sha1_text(normalize_ws(text))[:12]}",
                     doc_id=doc.doc_id,
-                    chunk_index=idx,
+                    chunk_index=chunk_idx,
                     chunk_text=text,
                     char_start=b.char_start,
                     char_end=b.char_end,
@@ -105,6 +106,7 @@ class Chunker:
                     is_appendix=b.is_appendix,
                 )
             )
+            chunk_idx += 1
         if chunks and len(chunks) == 1 and chunks[0].token_count < self.min_tokens:
             log.debug("doc curto virou 1 chunk (ok): %s", doc.doc_id)
         return chunks
@@ -292,14 +294,12 @@ class Chunker:
         i = start
         cur_offset = offset
         in_list = True
-        blank_streak = 0
         while i < len(lines):
             ln = lines[i]
             if _LIST_ITEM.match(ln):
                 out.append(ln)
                 cur_offset += len(ln)
                 i += 1
-                blank_streak = 0
                 in_list = True
                 continue
             stripped = ln.strip()
@@ -309,7 +309,6 @@ class Chunker:
                     out.append(ln)
                     cur_offset += len(ln)
                     i += 1
-                    blank_streak = 0
                     continue
                 break
             # continuação indentada (sub-item ou paragrafo do item)

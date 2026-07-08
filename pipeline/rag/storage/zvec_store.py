@@ -20,7 +20,6 @@ Suposicoes marcadas (pontos unicos de ajuste caso a API Zvec varie):
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
@@ -168,29 +167,16 @@ class ZvecStore:
                     log.info("aberta collection existente: %s (read_only=%s)", path, read_only)
                     break
                 except Exception as e:
-                    if attempt < 3 and "lock" in str(e).lower():
-                        import time
-                        time.sleep(1.0 * (attempt + 1))
-                        continue
-                    if not read_only:
-                        try:
-                            ro = zvec.CollectionOption(read_only=1)
-                            collection = _open_collection(zvec, str(path), option=ro)
-                            log.info("aberta collection existente (read_only fallback): %s", path)
-                            break
-                        except Exception:
-                            if attempt < 4:
-                                import time
-                                time.sleep(2.0)
-                                continue
-                            collection = None
-                    else:
+                    if "lock" in str(e).lower():
                         if attempt < 4:
                             import time
-                            time.sleep(2.0)
+                            time.sleep(1.0 * (attempt + 1))
                             continue
-                        collection = None
-                    break
+                    raise RuntimeError(
+                        f"Nao foi possivel abrir a collection em {path}. "
+                        f"Outro processo pode estar usando. Aguarde alguns segundos e tente novamente. "
+                        f"Erro: {e}"
+                    ) from e
 
         if collection is None:
             if path.exists() and any(path.iterdir()):

@@ -18,6 +18,7 @@ Config default:
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -34,7 +35,6 @@ DEFAULT_TOP_K = 20
 DEFAULT_SCORE_THRESHOLD = 0.0
 DEFAULT_MAX_CONTEXT_CHUNKS = 8
 DEFAULT_MAX_PER_DOC = 3
-DEFAULT_HYBRID_WEIGHTS = [1.0, 0.6]  # [dense, fts/sparse]
 DEFAULT_RERANK_TOP_N_CANDIDATES = 20
 
 
@@ -45,13 +45,10 @@ class RetrievalConfig:
     max_context_chunks: int = DEFAULT_MAX_CONTEXT_CHUNKS
     max_per_doc: Optional[int] = DEFAULT_MAX_PER_DOC  # None = sem diversidade
     mode: str = "hybrid"  # dense | fts | hybrid | sparse
-    hybrid_weights: list[float] = None  # type: ignore[assignment]
     rerank: bool = True
     rerank_top_n_candidates: int = DEFAULT_RERANK_TOP_N_CANDIDATES
 
     def __post_init__(self) -> None:
-        if self.hybrid_weights is None:
-            self.hybrid_weights = list(DEFAULT_HYBRID_WEIGHTS)
         if self.mode not in {"dense", "fts", "hybrid", "sparse", "semantic"}:
             raise ValueError(f"modo de retrieval invalido: {self.mode}")
 
@@ -127,8 +124,6 @@ class Retriever:
     # -------------------------------------------------------- interna
 
     def _search(self, query: str, top_k: int, filter_sql: Optional[str]) -> list[Evidence]:
-        import time as _time
-        t_total = _time.perf_counter()
         mode = self.config.mode
 
         if mode == "dense":
@@ -149,16 +144,16 @@ class Retriever:
             )
         else:
             # hybrid (default): dense + FTS com RRF adaptativo
-            t_emb = _time.perf_counter()
+            t_emb = time.perf_counter()
             qv = self.provider.embed_query_dense(query)
-            t_emb_done = _time.perf_counter()
+            t_emb_done = time.perf_counter()
             rank_k = self._rank_constant_for(query)
             result = self.store.search_hybrid(
                 qv, query, top_k=top_k, filter=filter_sql,
                 use_rrf=True, rank_constant=rank_k,
             )
-            t_search = _time.perf_counter()
-            log.info("TIMING search: embed=%.1fms  hybrid=%.1fms (rrf_k=%d)  total=%.0fms",
+            t_search = time.perf_counter()
+            log.info("TIMING search: embed=%.1fms  hybrid=%.1fms (rrf_k=%d)  search=%.0fms",
                      (t_emb_done - t_emb) * 1000, (t_search - t_emb_done) * 1000, rank_k, (t_search - t_emb) * 1000)
 
         return result
