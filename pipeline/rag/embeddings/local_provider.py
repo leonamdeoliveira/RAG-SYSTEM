@@ -119,7 +119,7 @@ class BGEM3LocalProvider:
         self._onnx_output_names: Optional[list[str]] = None
         self._internal_backend: Optional[str] = None
         self._model_lock = threading.Lock()
-        self.supports_sparse = False
+        self.supports_sparse = enable_sparse  # Inicializar com o valor configurado
 
     # ---------------------------------------------------------------- init
 

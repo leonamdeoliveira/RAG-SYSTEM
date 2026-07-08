@@ -140,9 +140,12 @@ class Chunker:
         for i, h in enumerate(headings):
             level = h.level
             parents_list: list[tuple[int, str]] = []
+            # Incluir todos os headings de nível menor que o atual
             for prev in headings[:i]:
                 if prev.level < level:
                     parents_list.append((prev.level, prev.text))
+            # Incluir o próprio heading da seção
+            parents_list.append((level, h.text))
             parents_list.sort(key=lambda x: x[0])
             parents = tuple(parents_list)
 
@@ -479,6 +482,29 @@ class Chunker:
 
     def _is_noise(self, text: str, token_count: int) -> bool:
         """Filtra chunks que sao apenas numeros, pontuacao ou whitespace estrutural."""
+        # Preservar tabelas GFM (linhas com |)
+        if "|" in text and "\n" in text:
+            lines = text.strip().split("\n")
+            if len(lines) >= 2 and all("|" in line for line in lines):
+                return False
+        
+        # Preservar código (blocos com ```)
+        if "```" in text:
+            return False
+        
+        # Preservar listas (linhas com - ou * no início)
+        lines = text.strip().split("\n")
+        list_lines = [l for l in lines if l.strip().startswith(("-", "*", "+")) or re.match(r"^\d+[.)]\s", l.strip())]
+        if len(list_lines) > 0 and len(list_lines) >= len(lines) * 0.5:
+            return False
+        
+        # Preservar documentos com headings (mesmo que curtos)
+        if any(line.strip().startswith("#") for line in lines):
+            # Verificar se há conteúdo além do heading
+            non_heading_lines = [l for l in lines if not l.strip().startswith("#") and l.strip()]
+            if non_heading_lines:
+                return False
+        
         stripped = re.sub(r"[\s\d.,;:()\[\]{}#*_\-+|/\\%$\^&=<>@!?\"]+", "", text)
         if len(stripped) < 5:
             return True

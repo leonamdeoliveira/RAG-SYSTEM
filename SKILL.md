@@ -91,6 +91,7 @@ Cada chamada recarrega o modelo (~4s). Use só para perguntas isoladas.
 
 | Camada | Tecnologia | Detalhe |
 |--------|-----------|---------|
+| Text Cleaner | Regex/stdlib | Remove ruídos: refs [1], URLs duplicadas, fragmentos quebrados |
 | Chunker | Semântico Markdown | Hierarquia de headings, janela deslizante, filtro anti-ruído |
 | Tokenizer | `tokenizers` (Rust) | 21ms vs 12s do `transformers` |
 | Embedding | BGE-M3 ONNX INT8 (C++ via onnxruntime) | 1024d dense + sparse, 6 threads (metade CPU) |

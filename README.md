@@ -66,13 +66,28 @@ python main.py ingest --rag-only --provider dummy --dimension 64
 ```
 Documentos (PDF/Word/PPT/imagens)
     -> OCR (PyMuPDF + Tesseract) -> Markdown
-    -> Chunking semantico -> BGE-M3 ONNX INT8 (embeddings) -> indice Zvec
+    -> Text Cleaner (remove ruídos) -> Chunking semantico
+    -> BGE-M3 ONNX INT8 (embeddings) -> indice Zvec
 
 Pergunta no chat -> retrieve (dense + FTS + RRF) -> chunks relevantes
     -> assistente IA gera resposta com citacoes
 ```
 
 **Tempo:** ~3.5s por consulta, ~12s para indexar 55 chunks (DML GPU) / ~33s (CPU).
+
+---
+
+## Text Cleaner
+
+O sistema limpa automaticamente o texto antes do chunking para melhorar qualidade dos embeddings e snippets:
+
+- **Remove referências numéricas** — `[1]`, `[2]`, etc
+- **Remove URLs duplicadas** — mantém apenas primeira ocorrência
+- **Remove fragmentos quebrados** — `ript-to-1/`, etc
+- **Remove linhas curtas** — < 10 caracteres (ruído)
+- **Normaliza whitespace** — espaços múltiplos, newlines excessivos
+
+**Impacto:** Snippets mais limpos e relevantes, especialmente para documentos OCR/PDF.
 
 ---
 

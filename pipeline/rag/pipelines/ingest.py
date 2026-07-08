@@ -199,9 +199,16 @@ class IngestPipeline:
         # 4) persistir manifesto
         self.manifest.save()
 
-        # 5) fechar cache
+        # 5) fechar cache e store
         if self._embed_cache is not None:
             self._embed_cache.close()
+        
+        # Fechar store para liberar lock do Zvec
+        if hasattr(self.store, 'collection') and hasattr(self.store.collection, 'close'):
+            try:
+                self.store.collection.close()
+            except Exception:
+                pass
 
         log.info("ingest completo: %s", report.summary())
         return report

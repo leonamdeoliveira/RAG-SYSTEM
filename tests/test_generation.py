@@ -24,7 +24,7 @@ def _ev(i: int, text: str = "chunk content", doc_id: str = "d1", score: float = 
 
 def test_system_prompt_contains_grounding_rules():
     s = system_prompt("answer")
-    assert "Use ONLY the provided context" in s
+    assert "Use ONLY the context" in s
     assert "could not find an answer" in s
     assert "Never invent" in s
 

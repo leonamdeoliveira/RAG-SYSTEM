@@ -20,6 +20,7 @@ from typing import Optional
 
 from pipeline.rag.manifest import CorpusDiff, Manifest
 from pipeline.rag.models import Document
+from pipeline.rag.text_cleaner import clean_text, clean_markdown
 from pipeline.rag.utils.hashing import sha256_file, stable_doc_id
 from pipeline.rag.utils.logging import get_logger
 
@@ -88,6 +89,9 @@ class MarkdownLoader:
         """Lê um arquivo .md e produz um `Document` com metadados."""
         raw = abs_path.read_text(encoding="utf-8", errors="replace")
         body, front = self._strip_front_matter(raw)
+        # Aplicar text preprocessing para melhorar qualidade dos chunks
+        body = clean_text(body)
+        body = clean_markdown(body)
         rel = self._rel(abs_path)
 
         title = front.get("title") or self._extract_title(body) or abs_path.stem
