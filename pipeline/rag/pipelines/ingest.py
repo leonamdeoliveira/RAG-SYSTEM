@@ -152,6 +152,9 @@ class IngestPipeline:
             try:
                 self.store.delete_by_doc(doc_id)
                 self.manifest.remove(doc_id)
+            except KeyboardInterrupt:
+                log.warning("Remoção de documentos interrompida pelo usuário")
+                raise
             except Exception as e:
                 report.errors.append(f"remove {doc_id}: {e}")
                 log.error("erro removendo doc %s: %s", doc_id, e)
@@ -184,6 +187,9 @@ class IngestPipeline:
                     )
                 )
                 log.info("ingerido %s: %d chunks", rel, n)
+            except KeyboardInterrupt:
+                log.warning("Ingestão interrompida pelo usuário em %s", rel)
+                raise
             except Exception as e:
                 report.errors.append(f"ingest {rel}: {e}")
                 log.error("erro ingerindo %s: %s", rel, e)

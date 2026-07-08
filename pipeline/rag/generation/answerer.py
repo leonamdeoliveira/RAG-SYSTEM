@@ -19,8 +19,8 @@ Answerer apenas orquestra e empacota em `Answer`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional, Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Optional, Protocol, runtime_checkable, Any
 
 from pipeline.rag.generation.prompt_builder import build_prompt, build_sources_block
 from pipeline.rag.models import Answer, Evidence
@@ -43,6 +43,24 @@ class OpenAICompatibleClient:
     api_key: str = ""
     model: str = "local"
     timeout: float = 60.0
+    _client: Optional[Any] = field(default=None, init=False, repr=False)
+    
+    def _ensure_client(self) -> Optional[Any]:
+        """Cria cliente apenas uma vez (cache)."""
+        if self._client is None:
+            try:
+                from openai import OpenAI
+                self._client = OpenAI(
+                    base_url=self.base_url,
+                    api_key=self.api_key,
+                    timeout=self.timeout
+                )
+                log.debug("OpenAI client criado: %s", self.base_url)
+            except ImportError:
+                pass
+            except Exception as e:
+                log.debug("Erro ao criar OpenAI client: %s", e)
+        return self._client
 
     def complete(self, system: str, user: str, temperature: float = 0.2, max_tokens: int = 700) -> str:
         payload = {
@@ -55,17 +73,14 @@ class OpenAICompatibleClient:
             "max_tokens": max_tokens,
             "stream": False,
         }
-        # 1) tentar via openai SDK (mais robusto)
-        try:
-            from openai import OpenAI
-
-            client = OpenAI(base_url=self.base_url, api_key=self.api_key, timeout=self.timeout)
-            resp = client.chat.completions.create(**payload)
-            return resp.choices[0].message.content or ""
-        except ImportError:
-            pass
-        except Exception as e:
-            log.warning("openai SDK falhou (%s); fallback requests", e)
+        # 1) tentar via openai SDK (mais robusto) - reutiliza cliente
+        client = self._ensure_client()
+        if client is not None:
+            try:
+                resp = client.chat.completions.create(**payload)
+                return resp.choices[0].message.content or ""
+            except Exception as e:
+                log.warning("openai SDK falhou (%s); fallback requests", e)
 
         # 2) fallback requests direto
         import json

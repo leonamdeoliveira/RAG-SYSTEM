@@ -229,6 +229,9 @@ class OCRPipeline:
                     ocr_text = self.process_page(page, "markdown")
                     method = "ocr"
                     conf = 1.0
+                except KeyboardInterrupt:
+                    logger.warning("OCR interrompido pelo usuário na página %d", page_num)
+                    raise
                 except Exception as e:
                     logger.error("Page %d OCR failed: %s", page_num, e)
                     status = f"error: {e}"
@@ -682,8 +685,18 @@ class OCRPipeline:
         return self._clean_output(content, fmt)
 
     def _process_batch(self, pages: list[PDFPage], fmt: str) -> str:
+        """Processa múltiplas páginas em batch usando o prompt correto."""
         images = [p.image for p in pages]
-        raw = self.client.ocr_images("", images, system_prompt="")
+        
+        # Usar o prompt correto baseado no formato
+        prompt_fmt = self.model_config.get("default_prompt_format", "html")
+        actual_fmt = prompt_fmt if fmt == "markdown" else fmt
+        prompt = self.prompts[actual_fmt]
+        
+        # System prompt baseado na config do modelo
+        system_prompt = "" if not self._use_system_prompt else None
+        
+        raw = self.client.ocr_images(prompt, images, system_prompt=system_prompt)
         return self._clean_output(raw, fmt)
 
     def _prepare_outputs(self):

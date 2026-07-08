@@ -37,7 +37,7 @@ def _detect_dml() -> bool:
         import onnxruntime as ort
         providers = ort.get_available_providers()
         return "DmlExecutionProvider" in providers
-    except Exception:
+    except (ImportError, RuntimeError):
         return False
 
 
@@ -69,7 +69,8 @@ def _detect_cpu_features() -> str:
                 return "avx512"
             if "avx2" in name:
                 return "avx2"
-    except Exception:
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log.debug("Erro ao detectar CPU features via PowerShell: %s", e)
         pass
     try:
         import platform
@@ -83,8 +84,8 @@ def _detect_cpu_features() -> str:
                     return "avx512"
                 if "avx2" in flags:
                     return "avx2"
-    except Exception:
-        pass
+    except (IOError, OSError) as e:
+        log.debug("Erro ao ler /proc/cpuinfo: %s", e)
     return "unknown"
 
 
@@ -211,35 +212,43 @@ class BGEM3LocalProvider:
         log.info("BGE-M3 carregado via ONNX (quantizado int8, threads=%d)", max(2, cpu_count // 2))
 
     def _warmup_onnx(self) -> None:
+        """Warmup em background thread (non-blocking)."""
         if self._onnx_tokenizer is None or self._model is None:
             return
-        try:
-            enc = self._onnx_tokenizer.encode("warmup")
-            ids = np.array([enc.ids], dtype=np.int64)
-            mask = np.array([enc.attention_mask], dtype=np.int64)
-            output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
-            self._model.run(
-                output_names,
-                {"input_ids": ids, "attention_mask": mask},
-            )
-        except Exception:
-            pass
+        
+        def _warmup():
+            try:
+                enc = self._onnx_tokenizer.encode("warmup")
+                ids = np.array([enc.ids], dtype=np.int64)
+                mask = np.array([enc.attention_mask], dtype=np.int64)
+                output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
+                self._model.run(
+                    output_names,
+                    {"input_ids": ids, "attention_mask": mask},
+                )
+                log.debug("Warmup ONNX concluído em background")
+            except (RuntimeError, ValueError) as e:
+                log.debug("Warmup ONNX falhou: %s", e)
+        
+        # Executa em background thread (não bloqueia)
+        import threading
+        threading.Thread(target=_warmup, daemon=True, name="onnx-warmup").start()
 
     def _warmup_torch(self) -> None:
         if self._model is None:
             return
         try:
             self._model.encode(["warmup"], batch_size=1, return_dense=True, return_sparse=False, return_colbert=False)
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as e:
+            log.debug("Warmup FlagEmbedding falhou: %s", e)
 
     def _warmup_st(self) -> None:
         if self._model is None:
             return
         try:
             self._model.encode(["warmup"], batch_size=1, normalize_embeddings=True, convert_to_numpy=True)
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as e:
+            log.debug("Warmup SentenceTransformers falhou: %s", e)
 
     def _ensure_torch(self) -> None:
         if self._model is not None:
@@ -412,12 +421,14 @@ def _resolve_onnx_model_path(model_name: str) -> Optional[str]:
         from huggingface_hub import hf_hub_download
         return hf_hub_download(model_name, "model_quantized.onnx")
     except ImportError:
+        log.debug("huggingface_hub não instalado, tentando cache local")
         pass
-    except Exception:
+    except (OSError, ValueError) as e:
+        log.debug("Erro ao baixar modelo ONNX do HF Hub: %s", e)
         pass
 
     cache_root = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface" / "hub"))
-    model_dir = cache_root / "models--" + model_name.replace("/", "--")
+    model_dir = cache_root / f"models--{model_name.replace('/', '--')}"
     if not model_dir.exists():
         return None
     for onnx_file in model_dir.rglob("model_quantized.onnx"):

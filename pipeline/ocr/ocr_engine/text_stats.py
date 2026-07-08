@@ -24,7 +24,9 @@ STOPWORDS = frozenset({
 
 
 def tokenize(text: str) -> set[str]:
-    words = re.findall(r"[a-zA-Z]{4,}", text.lower())
+    """Tokeniza texto preservando caracteres Unicode (PT, ES, FR, etc)."""
+    # \w captura letras Unicode (á, é, ã, ç, ñ, etc)
+    words = re.findall(r"\w{4,}", text.lower(), re.UNICODE)
     return {w for w in words if w not in STOPWORDS}
 
 

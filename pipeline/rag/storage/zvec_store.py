@@ -170,7 +170,11 @@ class ZvecStore:
                     if "lock" in str(e).lower():
                         if attempt < 4:
                             import time
-                            time.sleep(1.0 * (attempt + 1))
+                            import random
+                            # Exponential backoff com jitter
+                            wait = (2 ** attempt) * 0.5 + random.uniform(0, 0.5)
+                            log.debug("Lock detectado, retry %d/5 em %.1fs", attempt + 1, wait)
+                            time.sleep(wait)
                             continue
                     raise RuntimeError(
                         f"Nao foi possivel abrir a collection em {path}. "
@@ -362,14 +366,25 @@ class ZvecStore:
         def gf(n, d=None):
             v = fields.get(n, d) if isinstance(fields, dict) else getattr(fields, n, d)
             return v
+        
+        # Helper para conversão numérica segura (não ignora 0)
+        def safe_int(value, default=0):
+            if value is None:
+                return default
+            return int(value)
+        
+        def safe_float(value, default=0.0):
+            if value is None:
+                return default
+            return float(value)
 
         return Evidence(
             chunk_id=g("id") or gf("chunk_id") or "",
             doc_id=gf("doc_id", ""),
             source_path=gf("source_path", ""),
             file_name=gf("file_name", ""),
-            score=float(g("score", 0.0) or 0.0),
-            chunk_index=int(gf("chunk_index", 0) or 0),
+            score=safe_float(g("score", 0.0), 0.0),
+            chunk_index=safe_int(gf("chunk_index", 0), 0),
             snippet=gf("content", "") or "",
             h1=gf("h1"),
             h2=gf("h2"),

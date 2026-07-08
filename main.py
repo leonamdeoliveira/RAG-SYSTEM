@@ -18,11 +18,20 @@ from pathlib import Path
 
 
 def _setup_logging(level: str = "INFO") -> None:
+    """Configura logging globalmente para todos os módulos."""
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    
+    # Root logger
     logging.basicConfig(
-        level=getattr(logging, level.upper(), logging.INFO),
+        level=log_level,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         datefmt="%H:%M:%S",
     )
+    
+    # Configura loggers da aplicação
+    for logger_name in ["app", "pipeline", "rag", "ocr"]:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(log_level)
 
 
 def _get_skill_dir() -> Path:
@@ -36,6 +45,19 @@ def _cleanup_ocr_temp(ocr_output_dir: Path) -> None:
         shutil.rmtree(str(ocr_output_dir), ignore_errors=True)
     except Exception:
         pass
+
+
+def _close_store(store) -> None:
+    """Fecha o ZvecStore para liberar locks e recursos."""
+    if store is None:
+        return
+    try:
+        if hasattr(store, 'collection') and store.collection is not None:
+            if hasattr(store.collection, 'close'):
+                store.collection.close()
+    except Exception as e:
+        logger = logging.getLogger("rag-system")
+        logger.debug("Erro ao fechar store (ignorado): %s", e)
 
 
 def cmd_ingest(args: argparse.Namespace) -> None:
@@ -186,6 +208,9 @@ def cmd_ingest(args: argparse.Namespace) -> None:
                 logger.info("  → %s", dest)
                 total_processed += 1
             _cleanup_ocr_temp(ocr_output_dir)
+        except KeyboardInterrupt:
+            logger.warning("Processamento interrompido pelo usuário")
+            raise
         except Exception as e:
             logger.error("Erro no OCR de %s: %s", f.name, e)
             _cleanup_ocr_temp(ocr_output_dir)
@@ -265,20 +290,23 @@ def cmd_query(args: argparse.Namespace) -> None:
     s = get_settings(**overrides)
     query_pipeline, retriever, store = build_query_pipeline(s)
 
-    filters = _parse_filters(args.filter)
+    try:
+        filters = _parse_filters(args.filter)
 
-    if args.interactive:
-        _interactive_loop(query_pipeline, filters)
-        return
+        if args.interactive:
+            _interactive_loop(query_pipeline, filters)
+            return
 
-    question = args.question
-    if not question:
-        logger = logging.getLogger("rag-system")
-        logger.error("Nenhuma pergunta especificada. Use: python main.py query \"sua pergunta\"")
-        sys.exit(1)
+        question = args.question
+        if not question:
+            logger = logging.getLogger("rag-system")
+            logger.error("Nenhuma pergunta especificada. Use: python main.py query \"sua pergunta\"")
+            sys.exit(1)
 
-    result = query_pipeline.run(question, filters=filters)
-    _display_answer(result)
+        result = query_pipeline.run(question, filters=filters)
+        _display_answer(result)
+    finally:
+        _close_store(store)
 
 
 def cmd_retrieve(args: argparse.Namespace) -> None:
@@ -313,76 +341,80 @@ def cmd_retrieve(args: argparse.Namespace) -> None:
     t1 = time.perf_counter()
     query_pipeline, retriever, store = build_query_pipeline(s)
     t2 = time.perf_counter()
-    filters = _parse_filters(args.filter)
 
-    if args.interactive:
-        print("\nRAG Retrieve — Modo Interativo (modelo carregado)")
-        print("Digite a pergunta ou :quit para sair, :mode <dense|fts|hybrid|sparse> para trocar\n")
-        while True:
-            try:
-                q = input(">>> ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\n")
-                break
-            if not q:
-                continue
-            if q == ":quit":
-                break
-            if q.startswith(":mode "):
-                m = q.split(" ", 1)[1].strip()
-                retriever.config.mode = m
-                print(f"  Modo: {m}")
-                continue
-            tq0 = time.perf_counter()
-            hits, confidence = retriever.retrieve_with_confidence(q, filters)
-            tq1 = time.perf_counter()
-            print(f"\nEvidencias ({len(hits)} chunks, conf={confidence:.3f}, {int((tq1 - tq0) * 1000)}ms):\n")
-            for i, ev in enumerate(hits, 1):
-                loc_parts = [ev.source_path]
-                if ev.h1:
-                    loc_parts.append(ev.h1)
-                if ev.h2:
-                    loc_parts.append(ev.h2)
-                loc = " > ".join(loc_parts)
-                snippet = ev.snippet[:200]
-                suffix = "..." if len(ev.snippet) > 200 else ""
-                print(f"[{i}] {loc}  (score={ev.score:.3f})")
+    try:
+        filters = _parse_filters(args.filter)
+
+        if args.interactive:
+            print("\nRAG Retrieve — Modo Interativo (modelo carregado)")
+            print("Digite a pergunta ou :quit para sair, :mode <dense|fts|hybrid|sparse> para trocar\n")
+            while True:
                 try:
-                    print(f"    {snippet}{suffix}\n")
-                except UnicodeEncodeError:
-                    print(f"    {snippet.encode('ascii', errors='replace').decode()}{suffix}\n")
-        return
+                    q = input(">>> ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\n")
+                    break
+                if not q:
+                    continue
+                if q == ":quit":
+                    break
+                if q.startswith(":mode "):
+                    m = q.split(" ", 1)[1].strip()
+                    retriever.config.mode = m
+                    print(f"  Modo: {m}")
+                    continue
+                tq0 = time.perf_counter()
+                hits, confidence = retriever.retrieve_with_confidence(q, filters)
+                tq1 = time.perf_counter()
+                print(f"\nEvidencias ({len(hits)} chunks, conf={confidence:.3f}, {int((tq1 - tq0) * 1000)}ms):\n")
+                for i, ev in enumerate(hits, 1):
+                    loc_parts = [ev.source_path]
+                    if ev.h1:
+                        loc_parts.append(ev.h1)
+                    if ev.h2:
+                        loc_parts.append(ev.h2)
+                    loc = " > ".join(loc_parts)
+                    snippet = ev.snippet[:200]
+                    suffix = "..." if len(ev.snippet) > 200 else ""
+                    print(f"[{i}] {loc}  (score={ev.score:.3f})")
+                    try:
+                        print(f"    {snippet}{suffix}\n")
+                    except UnicodeEncodeError:
+                        print(f"    {snippet.encode('ascii', errors='replace').decode()}{suffix}\n")
+            return
 
-    question = args.question
-    if not question:
+        question = args.question
+        if not question:
+            logger = logging.getLogger("rag-system")
+            logger.error("Nenhuma pergunta especificada. Use: python main.py retrieve \"sua pergunta\" ou --interactive")
+            sys.exit(1)
+
+        hits, confidence = retriever.retrieve_with_confidence(question, filters)
+        t3 = time.perf_counter()
+        max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
+
         logger = logging.getLogger("rag-system")
-        logger.error("Nenhuma pergunta especificada. Use: python main.py retrieve \"sua pergunta\" ou --interactive")
-        sys.exit(1)
+        logger.info("TIMING: build=%.1fms  retrieval=%.0fms  TOTAL=%.0fms",
+                    (t2 - t1) * 1000, (t3 - t2) * 1000, (t3 - t1) * 1000)
 
-    hits, confidence = retriever.retrieve_with_confidence(question, filters)
-    t3 = time.perf_counter()
-    max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
-
-    logger = logging.getLogger("rag-system")
-    logger.info("TIMING: build=%.1fms  retrieval=%.0fms  TOTAL=%.0fms",
-                (t2 - t1) * 1000, (t3 - t2) * 1000, (t3 - t1) * 1000)
-
-    print(f"\nEvidencias recuperadas ({len(hits)} chunks, confianca={confidence:.3f}):\n")
-    for i, ev in enumerate(hits, 1):
-        loc_parts = [ev.source_path]
-        if ev.h1:
-            loc_parts.append(ev.h1)
-        if ev.h2:
-            loc_parts.append(ev.h2)
-        loc = " > ".join(loc_parts)
-        snippet = ev.snippet[:max_chars]
-        suffix = "..." if len(ev.snippet) > max_chars else ""
-        print(f"[{i}] {loc}  (score={ev.score:.3f})")
-        try:
-            print(f"    {snippet}{suffix}")
-        except UnicodeEncodeError:
-            print(f"    {snippet.encode('ascii', errors='replace').decode()}{suffix}")
-        print()
+        print(f"\nEvidencias recuperadas ({len(hits)} chunks, confianca={confidence:.3f}):\n")
+        for i, ev in enumerate(hits, 1):
+            loc_parts = [ev.source_path]
+            if ev.h1:
+                loc_parts.append(ev.h1)
+            if ev.h2:
+                loc_parts.append(ev.h2)
+            loc = " > ".join(loc_parts)
+            snippet = ev.snippet[:max_chars]
+            suffix = "..." if len(ev.snippet) > max_chars else ""
+            print(f"[{i}] {loc}  (score={ev.score:.3f})")
+            try:
+                print(f"    {snippet}{suffix}")
+            except UnicodeEncodeError:
+                print(f"    {snippet.encode('ascii', errors='replace').decode()}{suffix}")
+            print()
+    finally:
+        _close_store(store)
 
 
 def cmd_retrieve_batch(args: argparse.Namespace) -> None:
@@ -414,46 +446,50 @@ def cmd_retrieve_batch(args: argparse.Namespace) -> None:
     t0 = time.perf_counter()
     s = get_settings(**overrides)
     query_pipeline, retriever, store = build_query_pipeline(s)
-    filters = _parse_filters(args.filter)
-    max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
-    t1 = time.perf_counter()
-    logger = logging.getLogger("rag-system")
-    logger.info("Modelo carregado em %.1fs. Processando %d queries...", t1 - t0, len(args.questions))
 
-    all_results = []
-    for q in args.questions:
-        tq0 = time.perf_counter()
-        hits, confidence = retriever.retrieve_with_confidence(q, filters)
-        tq1 = time.perf_counter()
-        results = []
-        for ev in hits:
-            results.append({
-                "chunk_id": ev.chunk_id,
-                "source_path": ev.source_path,
-                "score": ev.score,
-                "snippet": ev.snippet[:max_chars],
-                "h1": ev.h1 or "",
-                "h2": ev.h2 or "",
-                "title": ev.title or "",
+    try:
+        filters = _parse_filters(args.filter)
+        max_chars = getattr(args, 'max_chars', None) or s.prompt_max_chars_per_chunk
+        t1 = time.perf_counter()
+        logger = logging.getLogger("rag-system")
+        logger.info("Modelo carregado em %.1fs. Processando %d queries...", t1 - t0, len(args.questions))
+
+        all_results = []
+        for q in args.questions:
+            tq0 = time.perf_counter()
+            hits, confidence = retriever.retrieve_with_confidence(q, filters)
+            tq1 = time.perf_counter()
+            results = []
+            for ev in hits:
+                results.append({
+                    "chunk_id": ev.chunk_id,
+                    "source_path": ev.source_path,
+                    "score": ev.score,
+                    "snippet": ev.snippet[:max_chars],
+                    "h1": ev.h1 or "",
+                    "h2": ev.h2 or "",
+                    "title": ev.title or "",
+                })
+            all_results.append({
+                "query": q,
+                "confidence": confidence,
+                "count": len(hits),
+                "time_ms": int((tq1 - tq0) * 1000),
+                "results": results,
             })
-        all_results.append({
-            "query": q,
-            "confidence": confidence,
-            "count": len(hits),
-            "time_ms": int((tq1 - tq0) * 1000),
-            "results": results,
-        })
 
-    t2 = time.perf_counter()
-    output = {
-        "total_time_ms": int((t2 - t0) * 1000),
-        "model_load_ms": int((t1 - t0) * 1000),
-        "query_count": len(args.questions),
-        "queries": all_results,
-    }
-    import sys
-    sys.stdout.reconfigure(encoding="utf-8")
-    print(json.dumps(output, ensure_ascii=False, indent=2))
+        t2 = time.perf_counter()
+        output = {
+            "total_time_ms": int((t2 - t0) * 1000),
+            "model_load_ms": int((t1 - t0) * 1000),
+            "query_count": len(args.questions),
+            "queries": all_results,
+        }
+        import sys
+        sys.stdout.reconfigure(encoding="utf-8")
+        print(json.dumps(output, ensure_ascii=False, indent=2))
+    finally:
+        _close_store(store)
 
 
 def cmd_reindex(args: argparse.Namespace) -> None:
@@ -508,43 +544,42 @@ def cmd_reindex(args: argparse.Namespace) -> None:
     logger.info(str(report))
 
 
-def cmd_run(args: argparse.Namespace) -> None:
-    from pipeline.rag.config import get_settings
-    from pipeline.rag.factory import build_ingest_pipeline, build_query_pipeline
+# Modos válidos para validação
+VALID_ANSWER_MODES = {"answer", "answer_with_citations", "extractive_summary", "study_mode"}
+VALID_RETRIEVAL_MODES = {"dense", "fts", "hybrid", "sparse", "semantic"}
 
+
+def cmd_run(args: argparse.Namespace) -> None:
+    """Pipeline completo: OCR + ingest + query."""
     skill_dir = _get_skill_dir()
     markdown_dir = Path(args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown")))
     index_dir = Path(args.index_dir or os.environ.get("RAG_INDEX_DIR", str(skill_dir / "index")))
-    use_dummy = args.provider == "dummy"
 
     logger = logging.getLogger("rag-system")
 
-    ocr_only_args = argparse.Namespace(
-        input=args.input, data_dir=str(skill_dir / "data"),
-        markdown_dir=str(markdown_dir), ocr_only=False, rag_only=False,
-        ocr_mode=args.ocr_mode or os.environ.get("RAG_OCR_MODE", "hybrid"),
-        model=args.model or os.environ.get("RAG_OCR_MODEL", "glm-ocr"),
-        quality_threshold=args.quality_threshold,
-        ocr_langs=args.ocr_langs, dpi=args.dpi,
-        lmstudio_url=args.lmstudio_url, lmstudio_model=args.lmstudio_model,
-        lmstudio_api_key=args.lmstudio_api_key, provider=args.provider,
-        dimension=args.dimension, index_dir=str(index_dir),
-        timeout=args.timeout, retries=getattr(args, 'retries', 3),
-    )
-    cmd_ingest(ocr_only_args)
+    # Reutiliza args com overrides mínimos
+    ingest_args = argparse.Namespace(**vars(args))
+    ingest_args.ocr_only = False
+    ingest_args.rag_only = False
+    ingest_args.markdown_dir = str(markdown_dir)
+    ingest_args.index_dir = str(index_dir)
+    
+    cmd_ingest(ingest_args)
 
-    query_args = argparse.Namespace(
-        question=args.question, interactive=False, mode=args.mode,
-        filter=args.filter, provider=args.provider, dimension=args.dimension,
-        llm_model=args.llm_model, retrieval_mode=args.retrieval_mode,
-        index_dir=str(index_dir), markdown_dir=str(markdown_dir),
-    )
+    # Query também reutiliza
+    query_args = argparse.Namespace(**vars(args))
+    query_args.interactive = False
+    query_args.markdown_dir = str(markdown_dir)
+    query_args.index_dir = str(index_dir)
+    
     cmd_query(query_args)
 
 
 def _interactive_loop(query_pipeline, filters: dict) -> None:
     print("\nRAG System — Modo Interativo")
-    print("Digite sua pergunta ou :quit para sair, :mode <modo> para trocar modo\n")
+    print(f"Modos disponíveis: {', '.join(VALID_ANSWER_MODES)}")
+    print("Comandos: :quit, :mode <modo>, :help\n")
+    
     mode = "answer_with_citations"
     while True:
         try:
@@ -557,8 +592,18 @@ def _interactive_loop(query_pipeline, filters: dict) -> None:
         if q == ":quit":
             break
         if q.startswith(":mode "):
-            mode = q.split(" ", 1)[1].strip()
-            print(f"  Modo: {mode}")
+            new_mode = q.split(" ", 1)[1].strip()
+            if new_mode in VALID_ANSWER_MODES:
+                mode = new_mode
+                print(f"  ✓ Modo: {mode}")
+            else:
+                print(f"  ✗ Modo inválido: '{new_mode}'")
+                print(f"     Válidos: {', '.join(VALID_ANSWER_MODES)}")
+            continue
+        if q == ":help":
+            print(f"  Modos: {', '.join(VALID_ANSWER_MODES)}")
+            print("  :quit - Sair")
+            print("  :mode <modo> - Trocar modo")
             continue
         result = query_pipeline.run(q, filters=filters, mode=mode)
         _display_answer(result)
@@ -584,14 +629,40 @@ def _display_answer(answer) -> None:
 
 
 def _parse_filters(raw: list[str]):
-    """Converte lista de 'chave=valor' em FilterBuilder do Zvec."""
+    """Converte lista de 'chave=valor' em FilterBuilder do Zvec.
+    
+    Valida as chaves permitidas para evitar erros ou SQL injection.
+    Chaves permitidas: doc_id, source_path, language, doc_type, file_name
+    """
     from pipeline.rag.retrieval.filters import FilterBuilder
 
+    ALLOWED_KEYS = {"doc_id", "source_path", "language", "doc_type", "file_name"}
+    
     fb = FilterBuilder()
+    logger = logging.getLogger("rag-system")
+    
     for f in raw:
-        if "=" in f:
-            k, v = f.split("=", 1)
-            fb.eq(k.strip(), v.strip())
+        if "=" not in f:
+            logger.warning("Filtro inválido (ignorado): '%s'. Use formato chave=valor", f)
+            continue
+            
+        k, v = f.split("=", 1)
+        k = k.strip()
+        v = v.strip()
+        
+        if k not in ALLOWED_KEYS:
+            logger.warning(
+                "Chave de filtro desconhecida (ignorado): '%s'. "
+                "Chaves permitidas: %s", k, ", ".join(sorted(ALLOWED_KEYS))
+            )
+            continue
+            
+        if not v:
+            logger.warning("Valor vazio para filtro '%s' (ignorado)", k)
+            continue
+            
+        fb.eq(k, v)
+        
     return fb
 
 

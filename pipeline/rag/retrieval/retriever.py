@@ -19,6 +19,7 @@ Config default:
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Optional
 
@@ -68,10 +69,13 @@ class Retriever:
         self.store = store
         self.provider = provider
         self.config = config or RetrievalConfig()
-        self.reranker = reranker or CrossEncoderReranker(enabled=self.config.rerank)
-        self._query_cache: dict[str, "np.ndarray"] = {}
+        # Lazy loading do reranker (só cria se enabled)
+        self.reranker = reranker if self.config.rerank else None
+        # LRU cache usando OrderedDict
+        self._query_cache: OrderedDict[str, "np.ndarray"] = OrderedDict()
         self._query_cache_max = self.config.query_cache_size
         self._query_cache_hits = 0
+        self._query_cache_misses = 0
 
     # -------------------------------------------------------- public
 
@@ -102,8 +106,10 @@ class Retriever:
         if cfg.max_per_doc:
             hits = self._diversify(hits, cfg.max_per_doc)
 
-        # rerank opcional
-        if self.reranker and cfg.rerank:
+        # rerank opcional (lazy loading se necessário)
+        if cfg.rerank:
+            if self.reranker is None:
+                self.reranker = CrossEncoderReranker(enabled=True)
             hits = self.reranker.rerank(query, hits, top_n=cfg.max_context_chunks)
 
         # limite final de contexto
@@ -116,6 +122,40 @@ class Retriever:
             k,
         )
         return hits
+
+    def invalidate_cache(self) -> None:
+        """Invalida o cache de queries. Use após reindex para garantir resultados atualizados."""
+        cleared = len(self._query_cache)
+        self._query_cache.clear()
+        self._query_cache_hits = 0
+        self._query_cache_misses = 0
+        if cleared > 0:
+            log.info("Query cache invalidado: %d entries removidas", cleared)
+    
+    def cache_stats(self) -> dict:
+        """Retorna estatísticas do query cache."""
+        total = self._query_cache_hits + self._query_cache_misses
+        hit_rate = (self._query_cache_hits / total * 100) if total > 0 else 0.0
+        usage = (len(self._query_cache) / self._query_cache_max * 100) if self._query_cache_max > 0 else 0.0
+        
+        return {
+            "cache_size": len(self._query_cache),
+            "cache_max": self._query_cache_max,
+            "cache_hits": self._query_cache_hits,
+            "cache_misses": self._query_cache_misses,
+            "total_requests": total,
+            "hit_rate_pct": round(hit_rate, 2),
+            "cache_usage_pct": round(usage, 1),
+        }
+    
+    def print_cache_stats(self) -> None:
+        """Imprime estatísticas do cache."""
+        s = self.cache_stats()
+        log.info("=== Query Cache Stats ===")
+        log.info("  Hit rate:  %s%% (%d hits / %d requests)", 
+                 s['hit_rate_pct'], s['cache_hits'], s['total_requests'])
+        log.info("  Entries:   %d/%d (%s%% full)", 
+                 s['cache_size'], s['cache_max'], s['cache_usage_pct'])
 
     def retrieve_with_confidence(
         self,
@@ -130,14 +170,24 @@ class Retriever:
 
     # -------------------------------------------------------- interna
 
-    def _embed_query_dense_cached(self, query: str) -> np.ndarray:
-        """Embedda query com cache LRU em memoria (dict simples)."""
+    def _embed_query_dense_cached(self, query: str) -> "np.ndarray":
+        """Embedda query com cache LRU (OrderedDict).
+        
+        Cache é invalidado automaticamente quando o retriever é recriado.
+        """
         if query in self._query_cache:
             self._query_cache_hits += 1
+            # LRU: move para o final (marca como recém-usado)
+            self._query_cache.move_to_end(query)
             return self._query_cache[query]
+        
+        self._query_cache_misses += 1
         vec = self.provider.embed_query_dense(query)
+        
         if len(self._query_cache) >= self._query_cache_max:
-            self._query_cache.pop(next(iter(self._query_cache)))
+            # Remove o PRIMEIRO (menos recentemente usado)
+            self._query_cache.popitem(last=False)
+        
         self._query_cache[query] = vec
         return vec
 
@@ -177,6 +227,7 @@ class Retriever:
         return result
 
     def _search_sparse(self, query: str, top_k: int, filter_sql: Optional[str]) -> list[Evidence]:
+        """Busca usando sparse embeddings (lexical matching via BGE-M3)."""
         if not self.provider.supports_sparse:
             log.warning("modo=sparse mas provider sem suporte -> fallback FTS")
             return self.store.search_fts(match_string=query, top_k=top_k, filter=filter_sql)

@@ -76,6 +76,9 @@ class EmbedCache:
         self._conn.commit()
         self._model_id = model_id
         self._dirty = 0
+        self._hits = 0
+        self._misses = 0
+        self._db_path = path
         log.debug("embed cache inicializado: %s (model=%s)", path, model_id)
 
     def get(self, chunk_id: str) -> Optional[tuple[np.ndarray, Optional[SparseVector]]]:
@@ -85,7 +88,9 @@ class EmbedCache:
             (chunk_id, self._model_id),
         ).fetchone()
         if row is None:
+            self._misses += 1
             return None
+        self._hits += 1
         dense = np.frombuffer(row[0], dtype=np.float32).copy()
         return dense, _decode_sparse(row[1])
 
@@ -178,3 +183,33 @@ class EmbedCache:
 
     def __len__(self) -> int:
         return self.count()
+    
+    def stats(self) -> dict:
+        """Retorna estatísticas do cache."""
+        total = self._hits + self._misses
+        hit_rate = (self._hits / total * 100) if total > 0 else 0.0
+        
+        # Tamanho do arquivo
+        try:
+            db_size = self._db_path.stat().st_size
+        except (OSError, AttributeError):
+            db_size = 0
+        
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "total_requests": total,
+            "hit_rate_pct": round(hit_rate, 2),
+            "cache_entries": self.count(),
+            "db_size_mb": round(db_size / (1024*1024), 2),
+            "model_id": self._model_id,
+        }
+    
+    def print_stats(self) -> None:
+        """Imprime estatísticas formatadas."""
+        s = self.stats()
+        log.info("=== Embed Cache Stats ===")
+        log.info("  Hit rate: %s%% (%d/%d)", s['hit_rate_pct'], s['hits'], s['total_requests'])
+        log.info("  Entries:  %d", s['cache_entries'])
+        log.info("  Size:     %s MB", s['db_size_mb'])
+        log.info("  Model:    %s", s['model_id'])
