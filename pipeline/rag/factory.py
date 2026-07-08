@@ -29,8 +29,6 @@ def build_chunker(s: Settings) -> Chunker:
 
 
 def build_provider(s: Settings):
-    if s.embedding_provider == "dummy":
-        return get_provider("dummy", dimension=s.embedding_dimension, enable_sparse=False)
     return get_provider(
         "local",
         model_name=s.embedding_model,

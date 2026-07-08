@@ -47,15 +47,6 @@ python main.py ingest documento.pdf
 python main.py query "Qual o prazo?" --mode answer_with_citations
 ```
 
-### 3. Teste offline (sem modelos)
-
-```bash
-python main.py ingest --rag-only --provider dummy --dimension 64
-python main.py retrieve "teste" --provider dummy --dimension 64
-```
-
----
-
 ## Comandos
 
 | Comando | O que faz |
@@ -126,7 +117,7 @@ rm index/embed_cache.db
 | Problema | Solucao |
 |----------|---------|
 | Zvec nao instalado | `pip install zvec>=0.5.1` |
-| Embeddings nao carregam | `--provider dummy --dimension 64` |
+| Embeddings nao carregam | `RAG_EMBEDDING_BACKEND=torch` ou reinstale `onnxruntime` |
 | Tesseract nao instalado | `winget install UB-Mannheim.TesseractOCR` |
 | GPU nao detectada | `pip install onnxruntime-directml` |
 | ONNX erro de lock | Aguarde 2s (lock de escrita pendente) |

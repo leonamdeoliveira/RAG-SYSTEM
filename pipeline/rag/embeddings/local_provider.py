@@ -212,27 +212,14 @@ class BGEM3LocalProvider:
         log.info("BGE-M3 carregado via ONNX (quantizado int8, threads=%d)", max(2, cpu_count // 2))
 
     def _warmup_onnx(self) -> None:
-        """Warmup em background thread (non-blocking)."""
+        """Warmup sincrono que tambem valida o provider e dispara fallback DML->CPU se necessario."""
         if self._onnx_tokenizer is None or self._model is None:
             return
-        
-        def _warmup():
-            try:
-                enc = self._onnx_tokenizer.encode("warmup")
-                ids = np.array([enc.ids], dtype=np.int64)
-                mask = np.array([enc.attention_mask], dtype=np.int64)
-                output_names = self._onnx_output_names or ["dense_vecs", "sparse_vecs"]
-                self._model.run(
-                    output_names,
-                    {"input_ids": ids, "attention_mask": mask},
-                )
-                log.debug("Warmup ONNX concluído em background")
-            except (RuntimeError, ValueError) as e:
-                log.debug("Warmup ONNX falhou: %s", e)
-        
-        # Executa em background thread (não bloqueia)
-        import threading
-        threading.Thread(target=_warmup, daemon=True, name="onnx-warmup").start()
+        try:
+            self._embed_onnx(["warmup"], batch_size=1)
+            log.debug("Warmup ONNX concluido")
+        except Exception as e:
+            log.warning("Warmup ONNX falhou: %s", e)
 
     def _warmup_torch(self) -> None:
         if self._model is None:
@@ -346,6 +333,38 @@ class BGEM3LocalProvider:
 
     # ---------------------------------------------------------------- onnx backend
 
+    def _run_onnx_inference(self, output_names: list[str], feed_dict: dict) -> list[np.ndarray]:
+        """Roda inferencia ONNX com fallback automatico DML -> CPU se falhar."""
+        try:
+            return self._model.run(output_names, feed_dict)
+        except (RuntimeError, ValueError) as e:
+            providers = getattr(self._model, "get_providers", lambda: [])()
+            if "DmlExecutionProvider" not in providers:
+                raise
+            log.warning("DirectML falhou na inferencia (%s). Recriando sessao com CPU...", e)
+            try:
+                import onnxruntime as ort
+                model_path = _resolve_onnx_model_path(self._model_name_onnx)
+                if model_path is None:
+                    raise RuntimeError("modelo ONNX nao encontrado para recriar sessao CPU")
+                so = ort.SessionOptions()
+                so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                so.intra_op_num_threads = max(2, multiprocessing.cpu_count() // 2)
+                so.inter_op_num_threads = 1
+                so.enable_mem_pattern = True
+                self._model = ort.InferenceSession(
+                    model_path, sess_options=so, providers=["CPUExecutionProvider"]
+                )
+                log.info("ONNX recriado com CPU apos falha do DirectML")
+                return self._model.run(output_names, feed_dict)
+            except Exception as e2:
+                log.error("Falha ao recriar sessao ONNX com CPU: %s", e2)
+                raise RuntimeError(
+                    f"DirectML falhou e fallback CPU tambem falhou. "
+                    f"Use RAG_EMBEDDING_ONNX_DEVICE=cpu ou RAG_EMBEDDING_BACKEND=torch. "
+                    f"Erro original: {e}"
+                ) from e2
+
     def _embed_onnx(self, texts: list[str], batch_size: int = 16) -> EmbeddingResult:
         if self._onnx_tokenizer is None or self._model is None:
             raise RuntimeError("ONNX model/tokenizer not loaded")
@@ -361,7 +380,7 @@ class BGEM3LocalProvider:
             input_ids = np.array([e.ids + [0] * (max_len - len(e.ids)) for e in encodings], dtype=np.int64)
             attn_mask = np.array([e.attention_mask + [0] * (max_len - len(e.attention_mask)) for e in encodings], dtype=np.int64)
 
-            outputs = self._model.run(
+            outputs = self._run_onnx_inference(
                 output_names,
                 {"input_ids": input_ids, "attention_mask": attn_mask},
             )

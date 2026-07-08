@@ -70,10 +70,9 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     skill_dir = _get_skill_dir()
     markdown_dir = Path(args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown")))
     markdown_dir.mkdir(parents=True, exist_ok=True)
-    use_dummy = args.provider == "dummy"
 
     if args.rag_only:
-        _run_rag_ingest(args, skill_dir, markdown_dir, use_dummy)
+        _run_rag_ingest(args, skill_dir, markdown_dir)
         return
 
     input_path = Path(args.input) if args.input else None
@@ -218,7 +217,7 @@ def cmd_ingest(args: argparse.Namespace) -> None:
     logger.info("OCR concluído: %d arquivos processados", total_processed)
 
     if not args.ocr_only and total_processed > 0:
-        _run_rag_ingest(args, skill_dir, markdown_dir, use_dummy)
+        _run_rag_ingest(args, skill_dir, markdown_dir)
 
 
 def _collect_input_files(input_path: Path) -> list[Path]:
@@ -232,7 +231,7 @@ def _collect_input_files(input_path: Path) -> list[Path]:
     return [input_path]
 
 
-def _run_rag_ingest(args: argparse.Namespace, skill_dir: Path, markdown_dir: Path, use_dummy: bool = False) -> None:
+def _run_rag_ingest(args: argparse.Namespace, skill_dir: Path, markdown_dir: Path) -> None:
     from pipeline.rag.config import get_settings
     from pipeline.rag.factory import build_ingest_pipeline
 
@@ -246,12 +245,6 @@ def _run_rag_ingest(args: argparse.Namespace, skill_dir: Path, markdown_dir: Pat
         "index_dir": str(index_dir),
         "zvec_path": str(Path(index_dir) / "zvec_collection"),
     }
-    if use_dummy:
-        overrides["embedding_provider"] = "dummy"
-        overrides["embedding_dimension"] = args.dimension or 64
-        overrides["zvec_enable_sparse"] = False
-    if args.dimension:
-        overrides["embedding_dimension"] = int(args.dimension)
 
     s = get_settings(**overrides)
     pipeline = build_ingest_pipeline(s)
@@ -267,19 +260,12 @@ def cmd_query(args: argparse.Namespace) -> None:
     skill_dir = _get_skill_dir()
     index_dir = args.index_dir or os.environ.get("RAG_INDEX_DIR", str(skill_dir / "index"))
     markdown_dir = args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown"))
-    use_dummy = args.provider == "dummy"
 
     overrides = {
         "data_dir": str(markdown_dir),
         "index_dir": str(index_dir),
         "zvec_path": str(Path(index_dir) / "zvec_collection"),
     }
-    if use_dummy:
-        overrides["embedding_provider"] = "dummy"
-        overrides["embedding_dimension"] = args.dimension or 64
-        overrides["zvec_enable_sparse"] = False
-    if args.dimension:
-        overrides["embedding_dimension"] = int(args.dimension)
     if args.mode:
         overrides["answer_mode"] = args.mode
     if args.llm_model:
@@ -318,19 +304,12 @@ def cmd_retrieve(args: argparse.Namespace) -> None:
     skill_dir = _get_skill_dir()
     index_dir = args.index_dir or os.environ.get("RAG_INDEX_DIR", str(skill_dir / "index"))
     markdown_dir = args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown"))
-    use_dummy = args.provider == "dummy"
 
     overrides = {
         "data_dir": str(markdown_dir),
         "index_dir": str(index_dir),
         "zvec_path": str(Path(index_dir) / "zvec_collection"),
     }
-    if use_dummy:
-        overrides["embedding_provider"] = "dummy"
-        overrides["embedding_dimension"] = args.dimension or 64
-        overrides["zvec_enable_sparse"] = False
-    if args.dimension:
-        overrides["embedding_dimension"] = int(args.dimension)
     if args.retrieval_mode:
         overrides["retrieval_mode"] = args.retrieval_mode
     if args.top_k:
@@ -425,19 +404,12 @@ def cmd_retrieve_batch(args: argparse.Namespace) -> None:
     skill_dir = _get_skill_dir()
     index_dir = args.index_dir or os.environ.get("RAG_INDEX_DIR", str(skill_dir / "index"))
     markdown_dir = args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown"))
-    use_dummy = args.provider == "dummy"
 
     overrides = {
         "data_dir": str(markdown_dir),
         "index_dir": str(index_dir),
         "zvec_path": str(Path(index_dir) / "zvec_collection"),
     }
-    if use_dummy:
-        overrides["embedding_provider"] = "dummy"
-        overrides["embedding_dimension"] = args.dimension or 64
-        overrides["zvec_enable_sparse"] = False
-    if args.dimension:
-        overrides["embedding_dimension"] = int(args.dimension)
     if args.retrieval_mode:
         overrides["retrieval_mode"] = args.retrieval_mode
     if args.top_k:
@@ -499,19 +471,12 @@ def cmd_reindex(args: argparse.Namespace) -> None:
     skill_dir = _get_skill_dir()
     markdown_dir = Path(args.markdown_dir or os.environ.get("RAG_MARKDOWN_DIR", str(skill_dir / "markdown")))
     index_dir = Path(args.index_dir or os.environ.get("RAG_INDEX_DIR", str(skill_dir / "index")))
-    use_dummy = args.provider == "dummy"
 
     overrides = {
         "data_dir": str(markdown_dir),
         "index_dir": str(index_dir),
         "zvec_path": str(index_dir / "zvec_collection"),
     }
-    if use_dummy:
-        overrides["embedding_provider"] = "dummy"
-        overrides["embedding_dimension"] = args.dimension or 64
-        overrides["zvec_enable_sparse"] = False
-    if args.dimension:
-        overrides["embedding_dimension"] = int(args.dimension)
 
     s = get_settings(**overrides)
 
@@ -685,8 +650,6 @@ def parse_args() -> argparse.Namespace:
     p_ingest.add_argument("--data-dir", type=str, help="Diretório de entrada (arquivos brutos)")
     p_ingest.add_argument("--markdown-dir", type=str, help="Diretório de saída .md")
     p_ingest.add_argument("--index-dir", type=str, help="Diretório do índice Zvec")
-    p_ingest.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_ingest.add_argument("--dimension", type=int, help="Dimensão dos embeddings")
     p_ingest.add_argument("--lmstudio-url", type=str, help="URL do LM Studio")
     p_ingest.add_argument("--lmstudio-model", type=str, help="Modelo no LM Studio")
     p_ingest.add_argument("--lmstudio-api-key", type=str, help="API key LM Studio")
@@ -700,8 +663,6 @@ def parse_args() -> argparse.Namespace:
     p_query.add_argument("--interactive", action="store_true", help="Modo interativo (REPL)")
     p_query.add_argument("--mode", type=str, help="answer | answer_with_citations | extractive_summary | study_mode")
     p_query.add_argument("--filter", action="append", default=[], help="Filtro chave=valor (ex: language=pt)")
-    p_query.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_query.add_argument("--dimension", type=int, help="Dimensão dos embeddings")
     p_query.add_argument("--llm-model", type=str, help="Modelo LLM (stub para offline)")
     p_query.add_argument("--retrieval-mode", type=str, help="dense | fts | hybrid | sparse")
     p_query.add_argument("--index-dir", type=str, help="Diretório do índice Zvec")
@@ -712,8 +673,6 @@ def parse_args() -> argparse.Namespace:
     p_retrieve.add_argument("question", nargs="?", type=str, help="Pergunta (opcional no modo interativo)")
     p_retrieve.add_argument("--interactive", action="store_true", help="Modo interativo (modelo carregado uma vez)")
     p_retrieve.add_argument("--filter", action="append", default=[], help="Filtro chave=valor")
-    p_retrieve.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_retrieve.add_argument("--dimension", type=int, help="Dimensão dos embeddings")
     p_retrieve.add_argument("--retrieval-mode", type=str, help="dense | fts | hybrid | sparse")
     p_retrieve.add_argument("--index-dir", type=str, help="Diretório do índice Zvec")
     p_retrieve.add_argument("--markdown-dir", type=str, help="Diretório dos .md")
@@ -723,8 +682,6 @@ def parse_args() -> argparse.Namespace:
     p_rbatch = sub.add_parser("retrieve-batch", help="Multiplas queries em um unico processo (modelo carregado 1x)")
     p_rbatch.add_argument("questions", nargs="+", type=str, help="Lista de perguntas")
     p_rbatch.add_argument("--filter", action="append", default=[], help="Filtro chave=valor")
-    p_rbatch.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_rbatch.add_argument("--dimension", type=int, help="Dimensao dos embeddings")
     p_rbatch.add_argument("--retrieval-mode", type=str, help="dense | fts | hybrid | sparse")
     p_rbatch.add_argument("--index-dir", type=str, help="Diretorio do indice Zvec")
     p_rbatch.add_argument("--markdown-dir", type=str, help="Diretorio dos .md")
@@ -734,8 +691,6 @@ def parse_args() -> argparse.Namespace:
     # ---- reindex ----
     p_reindex = sub.add_parser("reindex", help="Reindexação completa")
     p_reindex.add_argument("--purge", action="store_true", help="Remove collection Zvec antes de reindexar")
-    p_reindex.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_reindex.add_argument("--dimension", type=int, help="Dimensão dos embeddings")
     p_reindex.add_argument("--index-dir", type=str, help="Diretório do índice Zvec")
     p_reindex.add_argument("--markdown-dir", type=str, help="Diretório dos .md")
 
@@ -750,8 +705,6 @@ def parse_args() -> argparse.Namespace:
     p_run.add_argument("--quality-threshold", type=float, help="Score mínimo OCR")
     p_run.add_argument("--ocr-langs", type=str, help="Idiomas Tesseract")
     p_run.add_argument("--dpi", type=int, help="DPI de renderização")
-    p_run.add_argument("--provider", type=str, default="local", help="local | dummy")
-    p_run.add_argument("--dimension", type=int, help="Dimensão dos embeddings")
     p_run.add_argument("--llm-model", type=str, help="Modelo LLM")
     p_run.add_argument("--retrieval-mode", type=str, help="dense | fts | hybrid | sparse")
     p_run.add_argument("--lmstudio-url", type=str)

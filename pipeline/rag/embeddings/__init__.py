@@ -9,10 +9,6 @@ from pipeline.rag.embeddings.base import (
 
 def get_provider(name: str, **kwargs) -> EmbeddingProvider:
     """Factory simples baseada em nome. Resolve o provider de config."""
-    if name == "dummy":
-        from pipeline.rag.embeddings.dummy_provider import DummyProvider
-
-        return DummyProvider(**kwargs)  # type: ignore[arg-type]
     if name in ("bge-m3", "bge-m3-local", "local"):
         from pipeline.rag.embeddings.local_provider import BGEM3LocalProvider
 

@@ -262,7 +262,7 @@ Ative esta skill quando:
 | `--top-k N` | `retrieve`, `retrieve-batch` | Número de chunks a recuperar (padrão: 20) |
 | `--mode <modo>` | `query` | Modo de resposta do LLM (ver abaixo) |
 | `--llm-model <modelo>` | `query` | Modelo no LM Studio/Ollama (ex: `llama-3.2`) |
-| `--provider dummy --dimension 64` | Todos | Teste offline sem modelos carregados |
+| `--llm-model stub` | `query` | Modo offline para testar pipeline sem LLM local |
 
 ---
 
@@ -368,7 +368,7 @@ rm index/embed_cache.db
 | Sintoma | Solução |
 |---------|---------|
 | Zvec não instalado | `pip install zvec>=0.5.1` |
-| Embeddings não carregam | Teste com `--provider dummy --dimension 64` |
+| Embeddings não carregam | Verifique `onnxruntime` e `huggingface-hub`; use `RAG_EMBEDDING_BACKEND=torch` |
 | ONNX não carrega | `pip install onnxruntime huggingface-hub tokenizers` |
 | Tokenizer não carrega | `pip install tokenizers>=0.19` |
 | OCR/LM Studio offline | Use `--ocr-mode classic_only` |

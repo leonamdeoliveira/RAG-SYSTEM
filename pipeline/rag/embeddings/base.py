@@ -5,9 +5,8 @@ A arquitetura define um `EmbeddingProvider` que deve produzir dense embeddings
 `{idx: peso}`) para busca híbrida no Zvec.
 
 Implementacoes:
-  - local_provider.py  -> BGE-M3 (dense 1024d + sparse) via FlagEmbedding,
+  - local_provider.py  -> BGE-M3 (dense 1024d + sparse) via ONNX ou FlagEmbedding,
                          fallback sentence-transformers (dense-only) com aviso.
-  - dummy_provider.py  -> vetores deterministicos por hash (testes offline).
 """
 
 from __future__ import annotations

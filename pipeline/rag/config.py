@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     chunker_overlap_ratio: float = 0.15
 
     # --- embeddings ---
-    embedding_provider: str = "local"  # local | dummy
+    embedding_provider: str = "local"  # local (BGE-M3)
     embedding_model: str = "BAAI/bge-m3"
     embedding_dimension: int = 1024
     embedding_device: str = "cpu"

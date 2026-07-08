@@ -42,9 +42,7 @@ python main.py retrieve-batch "prazo PT" "deadline EN" "variacao" --top-k 20
 # (Opcional) Modo standalone com LLM local (LM Studio / Ollama)
 python main.py query "Qual o prazo?" --mode answer_with_citations
 
-# Teste offline
-python main.py ingest --rag-only --provider dummy --dimension 64
-```
+
 
 ---
 
@@ -174,7 +172,7 @@ rag-system/
 | Problema | Solucao |
 |----------|---------|
 | Zvec nao instalado | `pip install zvec>=0.5.1` |
-| Embeddings nao carregam | `--provider dummy --dimension 64` |
+| Embeddings nao carregam | `RAG_EMBEDDING_BACKEND=torch` ou reinstale `onnxruntime` |
 | ONNX nao carrega | `pip install onnxruntime huggingface-hub` |
 | OCR nao funciona | `--ocr-mode classic_only` |
 | GPU AMD/Intel/NVIDIA | `pip install onnxruntime-directml` |
