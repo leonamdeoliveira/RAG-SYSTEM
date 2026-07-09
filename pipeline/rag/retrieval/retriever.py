@@ -6,8 +6,8 @@ Orquestra:
   - aplicacao de filtros escalares (SQL-like) + post-filtro de tags (memoria)
   - threshold de score
   - diversidade max_per_doc (evita saturacao por um documento)
-  - reranker leve opcional (cross-encoder)
   - limit max_context_chunks
+  - reranking feito pela IA do chat (fora desse pipeline)
 
 Config default:
   top_k=20, score_threshold=0.0, max_context_chunks=8, max_per_doc=3,
@@ -28,7 +28,6 @@ import numpy as np
 from pipeline.rag.embeddings.base import EmbeddingProvider, SparseVector
 from pipeline.rag.models import Evidence
 from pipeline.rag.retrieval.filters import FilterBuilder, post_filter_tags
-from pipeline.rag.retrieval.reranker import CrossEncoderReranker
 from pipeline.rag.storage.zvec_store import ZvecStore
 from pipeline.rag.utils.logging import get_logger
 
@@ -38,7 +37,6 @@ DEFAULT_TOP_K = 20
 DEFAULT_SCORE_THRESHOLD = 0.0
 DEFAULT_MAX_CONTEXT_CHUNKS = 8
 DEFAULT_MAX_PER_DOC = 3
-DEFAULT_RERANK_TOP_N_CANDIDATES = 20
 DEFAULT_QUERY_CACHE_SIZE = 128
 
 
@@ -49,8 +47,6 @@ class RetrievalConfig:
     max_context_chunks: int = DEFAULT_MAX_CONTEXT_CHUNKS
     max_per_doc: Optional[int] = DEFAULT_MAX_PER_DOC  # None = sem diversidade
     mode: str = "hybrid"  # dense | fts | hybrid | sparse
-    rerank: bool = True
-    rerank_top_n_candidates: int = DEFAULT_RERANK_TOP_N_CANDIDATES
     query_cache_size: int = DEFAULT_QUERY_CACHE_SIZE
 
     def __post_init__(self) -> None:
@@ -64,13 +60,10 @@ class Retriever:
         store: ZvecStore,
         provider: EmbeddingProvider,
         config: Optional[RetrievalConfig] = None,
-        reranker: Optional[CrossEncoderReranker] = None,
     ) -> None:
         self.store = store
         self.provider = provider
         self.config = config or RetrievalConfig()
-        # Lazy loading do reranker (só cria se enabled)
-        self.reranker = reranker if self.config.rerank else None
         # LRU cache usando OrderedDict
         self._query_cache: OrderedDict[str, "np.ndarray"] = OrderedDict()
         self._query_cache_max = self.config.query_cache_size
@@ -88,11 +81,9 @@ class Retriever:
         """Retorna Evidence[] ordenado por relevancia, apos pos-filtros."""
         cfg = self.config
         k = top_k or cfg.top_k
-        # com reranker ativo, busca mais candidatos para dar massa ao cross-encoder
-        search_k = max(k, cfg.rerank_top_n_candidates) if cfg.rerank else k
         filter_sql = filters.build() if filters else None
 
-        hits = self._search(query, search_k, filter_sql)
+        hits = self._search(query, k, filter_sql)
 
         # post-filtro de tags (ARRAY_STRING nao filtravel no Zvec v0.5)
         tags = filters.tags_filter if filters else None
@@ -105,12 +96,6 @@ class Retriever:
         # diversidade por documento
         if cfg.max_per_doc:
             hits = self._diversify(hits, cfg.max_per_doc)
-
-        # rerank opcional (lazy loading se necessário)
-        if cfg.rerank:
-            if self.reranker is None:
-                self.reranker = CrossEncoderReranker(enabled=True)
-            hits = self.reranker.rerank(query, hits, top_n=cfg.max_context_chunks)
 
         # limite final de contexto
         hits = hits[: cfg.max_context_chunks]

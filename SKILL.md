@@ -187,7 +187,7 @@ top_chunks = sorted(unique.values(), key=lambda x: x["score"], reverse=True)[:6]
    - ❌ Ruim: "segundo o arquivo contrato.md..."
    - ✅ Bom: "o prazo é de 30 dias [1]"
 
-5. **Confidence < 0.3**: Avisar usuário
+5. **Confidence < 0.02**: Avisar usuário
    - "⚠️ A informação nos documentos é limitada sobre este tópico"
 
 6. **Sempre responda em português**: Mesmo se documento estiver em inglês

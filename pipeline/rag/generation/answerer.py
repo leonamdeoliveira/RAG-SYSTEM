@@ -125,9 +125,9 @@ class Answerer:
     default_mode: str = "answer"
     temperature: float = 0.2
     max_tokens: int = 700
-    # Confianca considerada "baixa" (proxy: score max de retrieval). Default
-    # conservador: cosine normalizado em [0,1]; < 0.3 sugere recuperacao fraca.
-    low_confidence_threshold: float = 0.3
+    # Confianca considerada "baixa" (proxy: score max de retrieval). 
+    # RRF fusion scores sao comprimidos (tipicamente 0.01-0.20).
+    low_confidence_threshold: float = 0.02
     max_chars_per_chunk: int = 1600
 
     def answer(

@@ -60,14 +60,6 @@ class Settings(BaseSettings):
     retrieval_max_context_chunks: int = 8
     retrieval_max_per_doc: Optional[int] = 3
     retrieval_mode: str = "hybrid"  # dense | fts | hybrid | sparse
-    retrieval_rerank: bool = False  # desativado — chat IA faz reranking
-
-    # --- reranker (cross-encoder; desativado por padrao — chat IA faz o reranking) ---
-    rerank_enabled: bool = False
-    rerank_model: str = "suhaan7988/bge-reranker-v2-m3-int8-onnx"
-    rerank_device: str = "cpu"
-    rerank_max_length: int = 1024
-    rerank_top_n_candidates: int = 20  # quantos candidatos entram no reranker
 
     # --- generation / LLM ---
     llm_base_url: str = "http://localhost:1234/v1"
@@ -80,7 +72,7 @@ class Settings(BaseSettings):
     prompt_max_chars_per_chunk: int = 1600  # limite de chars por chunk no prompt do LLM
 
     # --- reliability ---
-    reliability_low_confidence_threshold: float = 0.3
+    reliability_low_confidence_threshold: float = 0.02
     reliability_expand_factor: int = 2
     reliability_max_retries: int = 1
 

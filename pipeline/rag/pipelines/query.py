@@ -28,7 +28,7 @@ log = get_logger("app.pipelines.query")
 
 @dataclass
 class QueryConfig:
-    low_confidence_threshold: float = 0.3
+    low_confidence_threshold: float = 0.02
     expand_factor: int = 2
     max_retries: int = 1
     conflict_score_gap: float = 0.15  # diferenca minima de score para NAO ser conflito

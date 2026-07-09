@@ -15,7 +15,6 @@ from pipeline.rag.markdown_loader import MarkdownLoader
 from pipeline.rag.pipelines.ingest import IngestPipeline
 from pipeline.rag.pipelines.query import QueryConfig, QueryPipeline
 from pipeline.rag.retrieval.retriever import RetrievalConfig, Retriever
-from pipeline.rag.retrieval.reranker import CrossEncoderReranker
 from pipeline.rag.storage.zvec_store import ZvecStore
 
 
@@ -94,14 +93,6 @@ def build_query_pipeline(s: Settings):
             max_context_chunks=s.retrieval_max_context_chunks,
             max_per_doc=s.retrieval_max_per_doc,
             mode=s.retrieval_mode,
-            rerank=s.retrieval_rerank,
-            rerank_top_n_candidates=s.rerank_top_n_candidates,
-        ),
-        reranker=CrossEncoderReranker(
-            model_name=s.rerank_model,
-            enabled=s.rerank_enabled,
-            device=s.rerank_device,
-            max_length=s.rerank_max_length,
         ),
     )
     # LLM: se modelo='stub' usa StubLLMClient (offline); senao OpenAI-compatible
